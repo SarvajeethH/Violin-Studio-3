@@ -3,7 +3,7 @@ import time
 import random
 import io
 import wave
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, AudioProcessorBase
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 
 # --- DATABASE AND SIMULATION LOGIC ---
 # (The entire large pieceDatabase from the previous step goes here)
@@ -35,42 +35,11 @@ feedbackPool = {
   ]
 }
 
-# --- NEW AUDIO HANDLING CLASS using Python's 'wave' library ---
-class AudioRecorder(AudioProcessorBase):
-    def __init__(self) -> None:
-        self.frames_buffer = []
-        self.sample_rate = 0
-        self.sample_width = 0
-        self.channels = 0
-
-    def recv(self, frame):
-        # Store the first frame's parameters to use when saving the WAV file
-        if self.sample_rate == 0:
-            self.sample_rate = frame.sample_rate
-            self.sample_width = frame.format.bytes
-            self.channels = len(frame.layout.channels)
-        
-        # Append raw audio frame data to the buffer
-        self.frames_buffer.append(frame.to_ndarray().tobytes())
-        return frame
-
-    def get_wav_bytes(self):
-        """Combines all recorded frames into a proper WAV byte string."""
-        if not self.frames_buffer:
-            return None
-        
-        wav_buffer = io.BytesIO()
-        with wave.open(wav_buffer, 'wb') as wf:
-            wf.setnchannels(self.channels)
-            wf.setsampwidth(self.sample_width)
-            wf.setframerate(self.sample_rate)
-            wf.writeframes(b''.join(self.frames_buffer))
-        
-        wav_buffer.seek(0)
-        return wav_buffer.getvalue()
+# --- AUDIO HANDLING: This part is now handled within the callback ---
 
 # --- HELPER FUNCTIONS ---
 def fetch_piece_info(piece_name):
+    # This function is unchanged
     search_terms = piece_name.lower().split()
     for key, piece in pieceDatabase.items():
         searchable_text = f"{piece['title'].lower()} {' '.join(piece['keywords'])}"
@@ -79,7 +48,7 @@ def fetch_piece_info(piece_name):
     return {"title": piece_name, "description": "Information for this piece could not be found.", "notFound": True}
 
 def get_advanced_ai_analysis(duration, piece_title, status_placeholder):
-    # This simulation function remains the same
+    # This function is unchanged
     status_placeholder.info(f"Initializing analysis for \"{piece_title}\"... (Estimated time: 10-15 seconds)")
     time.sleep(2)
     is_audio_valid = random.random() > 0.1
@@ -104,58 +73,63 @@ def get_advanced_ai_analysis(duration, piece_title, status_placeholder):
 # --- STATE INITIALIZATION ---
 if 'ui_stage' not in st.session_state:
     st.session_state.ui_stage = 'welcome'
-    st.session_state.piece_name = ''
-    st.session_state.user_tempo = ''
+    st.session_state.piece_name_input = ''
+    st.session_state.user_tempo_input = 120 # Default value
     st.session_state.piece_info = None
     st.session_state.tempo_feedback = ''
+    st.session_state.audio_frames = []
     st.session_state.audio_bytes = None
     st.session_state.saved_audio_bytes = None
     st.session_state.ai_feedback = []
     st.session_state.analysis_error = ''
+    st.session_state.is_recording = False
 
-# --- CALLBACK FUNCTIONS ---
+# --- CALLBACKS & LOGIC ---
 def handle_submit_questions():
-    # This function remains the same
     if not st.session_state.piece_name_input:
         st.warning("Please enter the name of the piece.")
         return
-    st.session_state.ui_stage = 'describing'
-    st.session_state.piece_name = st.session_state.piece_name_input
-    st.session_state.user_tempo = st.session_state.user_tempo_input
-    info = fetch_piece_info(st.session_state.piece_name)
-    st.session_state.piece_info = info
-    if st.session_state.user_tempo and not info.get("notFound"):
-        user_bpm = int(st.session_state.user_tempo)
-        target_bpm = info['usualTempo']
-        if abs(user_bpm - target_bpm) / target_bpm <= 0.08:
-            st.session_state.tempo_feedback = "This is a great performance tempo!"
-        elif user_bpm > target_bpm:
-            st.session_state.tempo_feedback = "This is a bit faster than a typical performance tempo."
+    with st.spinner("Searching for piece information..."):
+        info = fetch_piece_info(st.session_state.piece_name_input)
+        st.session_state.piece_info = info
+        # Tempo Analysis
+        if st.session_state.user_tempo_input and not info.get("notFound"):
+            user_bpm = int(st.session_state.user_tempo_input)
+            target_bpm = info['usualTempo']
+            if abs(user_bpm - target_bpm) / target_bpm <= 0.08:
+                st.session_state.tempo_feedback = "This is a great performance tempo!"
+            elif user_bpm > target_bpm:
+                st.session_state.tempo_feedback = "This is a bit faster than a typical performance tempo."
+            else:
+                st.session_state.tempo_feedback = "This is a solid practice tempo, good for working out tough spots."
         else:
-            st.session_state.tempo_feedback = "This is a solid practice tempo, good for working out tough spots."
+            st.session_state.tempo_feedback = ''
+    st.session_state.ui_stage = 'describing'
 
 def handle_move_to_recording():
     st.session_state.ui_stage = 'recording'
-
-def handle_analyze():
-    if not st.session_state.audio_bytes:
-        st.warning("Please record your performance first.")
-        return
-    st.session_state.ui_stage = 'analyzing'
-    st.session_state.ai_feedback = []
-    st.session_state.analysis_error = ''
+    st.session_state.audio_frames = [] # Clear previous frames
 
 def handle_start_new_analysis():
-    if st.session_state.audio_bytes:
-        st.session_state.saved_audio_bytes = st.session_state.audio_bytes
+    # Reset all relevant states, keeping the saved audio
     st.session_state.ui_stage = 'questions'
-    st.session_state.piece_name = ''
-    st.session_state.user_tempo = ''
+    st.session_state.piece_name_input = ''
     st.session_state.piece_info = None
     st.session_state.tempo_feedback = ''
+    st.session_state.audio_frames = []
     st.session_state.audio_bytes = None
     st.session_state.ai_feedback = []
     st.session_state.analysis_error = ''
+    st.session_state.is_recording = False
+
+def handle_clear_recording():
+    st.session_state.audio_bytes = None
+    st.session_state.audio_frames = []
+
+# This is the new, robust callback for handling audio frames
+def audio_frame_callback(frame):
+    st.session_state.audio_frames.append(frame.to_ndarray().tobytes())
+    return frame
 
 # --- MAIN APP LAYOUT ---
 st.set_page_config(layout="wide", page_title="Violin Studio")
@@ -164,97 +138,127 @@ st.markdown("""
         #MainMenu, footer {visibility: hidden;}
         .stButton>button {
             background-color: #ffffff; color: #000000; border-radius: 50px;
-            padding: 10px 25px; font-weight: bold; border: none;
+            padding: 10px 25px; font-weight: bold; border: none; transition: all 0.2s;
         }
-        .stButton>button:hover {
-            background-color: #dddddd; transform: scale(1.05);
-        }
+        .stButton>button:hover { background-color: #dddddd; transform: scale(1.05); }
+        .stButton>button:disabled { background-color: #555; color: #999; }
+        .st-emotion-cache-1gulkj5 { list-style: none; padding-left: 0; } /* Removes bullet points */
     </style>
 """, unsafe_allow_html=True)
 
 col1, col2, col3 = st.columns([1, 4, 1])
+
 with col1:
     st.image("public/violin1.jpg")
     st.image("public/violin2.jpg")
 
 with col2:
+    # --- WELCOME SCREEN ---
     if st.session_state.ui_stage == 'welcome':
-        # Welcome UI is the same
         st.title("Violin Studio")
         st.markdown("### Welcome to the AI-Optimized Acoustic Enhancer Dashboard!")
-        st.markdown("This application is designed to help you grow as a musician...")
+        st.markdown("This application is designed to help you grow as a musician by providing cutting-edge tools to refine your sound...")
         if st.button("Start Your Analysis", key="start_welcome"):
             st.session_state.ui_stage = 'questions'
-            st.experimental_rerun()
+            st.rerun()
 
+    # --- MAIN INTERACTIVE AREA ---
     if st.session_state.ui_stage != 'welcome':
-        with st.container():
-            # Questions UI is the same
-            st.header("Practice Analysis")
-            st.text_input("What piece of music are you playing?", key="piece_name_input", placeholder="e.g., Vivaldi Winter")
-            st.number_input("What tempo (in BPM) are you taking it?", min_value=30, max_value=250, step=1, key="user_tempo_input")
-            st.button("Submit for Description", on_click=handle_submit_questions)
+        st.header("Practice Analysis")
+        st.text_input("What piece of music are you playing?", key="piece_name_input", placeholder="e.g., Vivaldi Winter")
+        st.number_input("What tempo (in BPM) are you taking it?", min_value=30, max_value=250, step=1, key="user_tempo_input")
+        st.button("Submit for Description", on_click=handle_submit_questions)
+        st.divider()
 
-        if st.session_state.ui_stage in ['describing', 'recording', 'analyzing', 'feedback']:
-            # Piece Info UI is the same
-            if st.session_state.piece_info:
-                with st.container():
-                    st.subheader(f"About: {st.session_state.piece_info['title']}")
-                    if st.session_state.tempo_feedback:
-                        st.info(f"**Tempo Note:** {st.session_state.tempo_feedback}")
-                    st.write(st.session_state.piece_info['description'])
-                    if not st.session_state.piece_info.get("notFound"):
-                        c1, c2 = st.columns(2)
-                        c1.metric("Suggested Practice", f"{st.session_state.piece_info['practiceTempo']} BPM")
-                        c2.metric("Typical Performance", f"{st.session_state.piece_info['usualTempo']} BPM")
-                    st.button("Move to Recording", on_click=handle_move_to_recording)
+        # --- PIECE INFO SECTION ---
+        if st.session_state.ui_stage in ['describing', 'recording', 'analyzing', 'feedback'] and st.session_state.piece_info:
+            st.subheader(f"About: {st.session_state.piece_info['title']}")
+            if st.session_state.tempo_feedback:
+                st.info(f"**Tempo Note:** {st.session_state.tempo_feedback}")
+            st.write(st.session_state.piece_info['description'])
+            if not st.session_state.piece_info.get("notFound"):
+                c1, c2 = st.columns(2)
+                c1.metric("Suggested Practice", f"{st.session_state.piece_info['practiceTempo']} BPM")
+                c2.metric("Typical Performance", f"{st.session_state.piece_info['usualTempo']} BPM")
+            st.button("Move to Recording", on_click=handle_move_to_recording)
+            st.divider()
 
+        # --- RECORDER SECTION ---
         if st.session_state.ui_stage in ['recording', 'analyzing', 'feedback']:
-            with st.container():
-                st.subheader("Record Your Performance")
-                webrtc_ctx = webrtc_streamer(key="audio-recorder", mode=WebRtcMode.SENDONLY, audio_processor_factory=AudioRecorder, media_stream_constraints={"audio": True, "video": False})
-                
-                # NEW LOGIC: When recording stops, use the processor's method to get WAV bytes
-                if not webrtc_ctx.state.playing and webrtc_ctx.audio_processor:
-                    audio_bytes = webrtc_ctx.audio_processor.get_wav_bytes()
-                    if audio_bytes:
-                        st.session_state.audio_bytes = audio_bytes
-
-                if st.session_state.saved_audio_bytes:
-                    st.markdown("##### Previous Recording")
-                    st.audio(st.session_state.saved_audio_bytes, format='audio/wav')
+            st.subheader("Record Your Performance")
+            
+            # The webrtc component now uses a callback to handle audio frames
+            webrtc_ctx = webrtc_streamer(
+                key="audio-recorder",
+                mode=WebRtcMode.SENDONLY,
+                audio_frame_callback=audio_frame_callback,
+                media_stream_constraints={"audio": True, "video": False},
+                rtc_configuration=RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
+            )
+            
+            # Convert and save audio only when recording stops
+            if not webrtc_ctx.state.playing and len(st.session_state.audio_frames) > 0:
+                # Save the current recording before clearing the buffer
                 if st.session_state.audio_bytes:
-                    st.markdown("##### Current Recording")
-                    st.audio(st.session_state.audio_bytes, format='audio/wav')
-                    st.button("Analyze My Recording", on_click=handle_analyze)
+                    st.session_state.saved_audio_bytes = st.session_state.audio_bytes
 
+                # Get audio parameters from the component context
+                audio_params = webrtc_ctx.audio_receiver.get_stats()["track"]
+                sample_rate = audio_params["sampleRate"]
+                sample_width = 2 # Assuming 16-bit audio
+                channels = audio_params["channels"]
+                
+                # Combine frames and create WAV bytes
+                wav_buffer = io.BytesIO()
+                with wave.open(wav_buffer, 'wb') as wf:
+                    wf.setnchannels(channels)
+                    wf.setsampwidth(sample_width)
+                    wf.setframerate(sample_rate)
+                    wf.writeframes(b''.join(st.session_state.audio_frames))
+                
+                st.session_state.audio_bytes = wav_buffer.getvalue()
+                st.session_state.audio_frames = [] # Clear buffer after processing
+                st.rerun() # Rerun to display the audio player immediately
+            
+            # Display saved and current recordings
+            if st.session_state.saved_audio_bytes:
+                st.markdown("##### Previous Recording")
+                st.audio(st.session_state.saved_audio_bytes, format='audio/wav')
+            
+            if st.session_state.audio_bytes:
+                st.markdown("##### Current Recording")
+                st.audio(st.session_state.audio_bytes, format='audio/wav')
+                
+                col_analyze, col_clear = st.columns(2)
+                col_analyze.button("Analyze My Recording", on_click=handle_analyze, type="primary")
+                col_clear.button("Clear Recording", on_click=handle_clear_recording)
+            
+            st.divider()
+
+        # --- ANALYSIS & FEEDBACK SECTIONS ---
         if st.session_state.ui_stage == 'analyzing':
             status_placeholder = st.empty()
             try:
-                # NEW LOGIC: Get duration directly from WAV bytes
                 with io.BytesIO(st.session_state.audio_bytes) as wav_f:
                     with wave.open(wav_f, 'rb') as wf:
                         duration = wf.getnframes() / float(wf.getframerate())
-                
                 feedback = get_advanced_ai_analysis(duration, st.session_state.piece_info['title'], status_placeholder)
                 st.session_state.ai_feedback = feedback
                 st.session_state.ui_stage = 'feedback'
-                st.experimental_rerun()
+                st.rerun()
             except ValueError as e:
                 st.session_state.analysis_error = str(e)
                 st.session_state.ui_stage = 'feedback'
-                st.experimental_rerun()
+                st.rerun()
 
         if st.session_state.ui_stage == 'feedback':
-            # Feedback UI is the same
-            with st.container():
-                st.subheader("Performance Analysis")
-                if st.session_state.analysis_error:
-                    st.error(st.session_state.analysis_error)
-                if st.session_state.ai_feedback:
-                    for item in st.session_state.ai_feedback:
-                        st.markdown(f"**Timestamp [{item['timestamp']}]**: {item['note']}")
-                st.button("Start New Analysis", on_click=handle_start_new_analysis)
+            st.subheader("Performance Analysis")
+            if st.session_state.analysis_error:
+                st.error(st.session_state.analysis_error)
+            if st.session_state.ai_feedback:
+                for item in st.session_state.ai_feedback:
+                    st.markdown(f"- **Timestamp [{item['timestamp']}]**: {item['note']}")
+            st.button("Start New Analysis", on_click=handle_start_new_analysis)
 
 with col3:
     st.image("public/violin3.jpg")
