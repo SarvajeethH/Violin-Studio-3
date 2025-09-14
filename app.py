@@ -9,7 +9,7 @@ from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 # --- ROBUST IMAGE LOADING ---
 try:
     img_violin1 = open("public/violin1.jpg", "rb").read()
-    img_violin2 = open("public.py", "rb").read() # Corrected path
+    img_violin2 = open("public/violin2.jpg", "rb").read()
     img_violin3 = open("public/violin3.jpg", "rb").read()
     img_violin4 = open("public/violin4.jpg", "rb").read()
 except FileNotFoundError:
@@ -38,7 +38,6 @@ pieceDatabase = {
 }
 
 comparativeFeedbackPool = {
-    # This dictionary remains unchanged
     "tone": [
         "your tone is slightly brighter and more focused than the benchmark recording.",
         "the benchmark recording exhibits a warmer, richer tone, especially in the lower register. Try using a slower, heavier bow.",
@@ -63,7 +62,6 @@ comparativeFeedbackPool = {
 
 # --- HELPER FUNCTIONS ---
 def fetch_piece_info(piece_name):
-    # This function is unchanged
     search_terms = piece_name.lower().split()
     for key, piece in pieceDatabase.items():
         searchable_text = f"{piece['title'].lower()} {piece['composer'].lower()} {' '.join(piece['keywords'])}"
@@ -71,9 +69,7 @@ def fetch_piece_info(piece_name):
             return piece
     return {"title": piece_name, "description": f"Information for '{piece_name}' could not be found...", "composer": "Unknown", "notFound": True}
 
-# --- NEW: HUMAN-LIKE FEEDBACK GENERATOR ---
 def get_human_comparative_analysis(status_placeholder):
-    # The simulation steps remain the same
     status_placeholder.info("Initializing comparison... (This may take up to 20 seconds)")
     time.sleep(2)
     status_placeholder.info("Step 1/3: Analyzing tonal characteristics of both recordings...")
@@ -82,20 +78,14 @@ def get_human_comparative_analysis(status_placeholder):
     time.sleep(random.uniform(4, 6))
     status_placeholder.info("Step 3/3: Cross-referencing pitch contours for discrepancies...")
     time.sleep(3)
-
-    # We now build a paragraph instead of a list
     tone_feedback = random.choice(comparativeFeedbackPool["tone"])
     dynamics_feedback = random.choice(comparativeFeedbackPool["dynamics"])
     style_feedback = random.choice(comparativeFeedbackPool["style"])
     pitch_feedback = random.choice(comparativeFeedbackPool["pitch"])
-
-    # Replace timestamps
     for feedback_str in [dynamics_feedback, pitch_feedback]:
         if "[timestamp]" in feedback_str:
             timestamp = time.strftime('%M:%S', time.gmtime(random.randint(5, 50)))
             feedback_str = feedback_str.replace("[timestamp]", timestamp)
-
-    # Assemble the paragraph
     full_report = (
         "Overall, this is a strong performance that captures the spirit of the benchmark recording. Here's a more detailed breakdown:\n\n"
         f"**In terms of tone**, {tone_feedback} \n\n"
@@ -104,19 +94,21 @@ def get_human_comparative_analysis(status_placeholder):
         f"**Regarding pitch accuracy**, {pitch_feedback} \n\n"
         "Great work! Keep focusing on these subtle details to get even closer to your goal."
     )
-    
     status_placeholder.empty()
     return full_report
 
-# --- STATE INITIALIZATION ---
+# --- ROBUST STATE INITIALIZATION ---
+# This block now initializes EVERY session state key the app might use.
 if 'initialized' not in st.session_state:
     st.session_state.initialized = True
+    # State for "About the Piece" tab
     st.session_state.search_query = ''
     st.session_state.searched_piece_info = None
+    # State for "Compare" tab
     st.session_state.audio_frames = []
     st.session_state.user_audio_bytes = None
     st.session_state.benchmark_audio_bytes = None
-    st.session_state.ai_feedback = "" # Now a string, not a list
+    st.session_state.ai_feedback = ""
     st.session_state.analysis_error = ''
     st.session_state.volume_level = 0.0
 
@@ -135,12 +127,9 @@ def audio_frame_callback(frame):
 
 # --- MAIN APP LAYOUT ---
 st.set_page_config(layout="wide", page_title="Violin Studio")
-
-# --- UPDATED CSS: Hides the anchor link symbols ---
 st.markdown("""
     <style>
         #MainMenu, footer {visibility: hidden;}
-        /* This new line hides the link symbols from all headers */
         h1 a, h2 a, h3 a, h4 a, h5 a, h6 a { display: none !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -163,6 +152,8 @@ with col2:
         if st.button("Search", key="search_piece"):
             with st.spinner(f"Searching for '{search_query}'..."):
                 st.session_state.searched_piece_info = fetch_piece_info(search_query)
+        
+        # This check is now safe because the key is guaranteed to exist.
         if st.session_state.searched_piece_info:
             st.divider()
             info = st.session_state.searched_piece_info
@@ -232,7 +223,6 @@ with col2:
             if st.session_state.analysis_error:
                 st.error(st.session_state.analysis_error)
             if st.session_state.ai_feedback:
-                # --- UPDATED: Displaying the paragraph ---
                 st.markdown(st.session_state.ai_feedback)
 
 with col3:
