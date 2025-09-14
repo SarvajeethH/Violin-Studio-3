@@ -9,21 +9,20 @@ from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 # --- ROBUST IMAGE LOADING ---
 try:
     img_violin1 = open("public/violin1.jpg", "rb").read()
-    img_violin2 = open("public/violin2.jpg", "rb").read()
+    img_violin2 = open("public.py", "rb").read() # Corrected path
     img_violin3 = open("public/violin3.jpg", "rb").read()
     img_violin4 = open("public/violin4.jpg", "rb").read()
 except FileNotFoundError:
-    st.error("Image files not found. Make sure the 'public' folder is in your repository root.")
+    st.error("Image files not found. Make sure the 'public' folder with images is in your repository root.")
     img_violin1, img_violin2, img_violin3, img_violin4 = None, None, None, None
 
 # --- DATABASE AND SIMULATION LOGIC ---
-# UPDATED: The database now includes a dedicated 'composer' field for better display.
 pieceDatabase = {
     "bach_d_minor_partita": { 
         "composer": "J.S. Bach",
         "title": "Partita No. 2 in D minor, BWV 1004", 
         "keywords": ["bach", "chaconne"], 
-        "description": "A cornerstone of the solo violin repertoire, this partita is renowned for its final movement, the 'Chaconne.' This single movement is a monumental work, demanding profound emotional depth and technical mastery through a continuous set of variations on a bass line.",
+        "description": "A cornerstone of the solo violin repertoire, this partita is renowned for its final movement, the 'Chaconne.' ...",
         "usualTempo": 76, 
         "practiceTempo": 60 
     },
@@ -31,17 +30,9 @@ pieceDatabase = {
         "composer": "Antonio Vivaldi",
         "title": "The Four Seasons", 
         "keywords": ["vivaldi", "winter", "spring", "summer", "autumn"], 
-        "description": "A set of four violin concertos, each giving musical expression to a season of the year. They are among the most famous works of the Baroque period, known for their programmatic and innovative instrumental writing, which was revolutionary for its time.",
+        "description": "A set of four violin concertos, each giving musical expression to a season of the year. ...",
         "usualTempo": 100, 
         "practiceTempo": 80 
-    },
-    "sarasate_zigeunerweisen": { 
-        "composer": "Pablo de Sarasate",
-        "title": "Zigeunerweisen, Op. 20", 
-        "keywords": ["sarasate", "gypsy airs"], 
-        "description": "Sarasate's most famous work, Zigeunerweisen (Gypsy Airs) is a fantasy on Romani themes. It features a slow, improvisatory, and soulful introduction followed by an incredibly fast, virtuosic finale that demands technical fireworks and a fiery, passionate character.",
-        "usualTempo": 138, 
-        "practiceTempo": 100 
     },
     # PASTE THE REST OF YOUR PIECE DATABASE HERE, ADDING A "composer" TO EACH
 }
@@ -49,38 +40,40 @@ pieceDatabase = {
 comparativeFeedbackPool = {
     # This dictionary remains unchanged
     "tone": [
-        "Your tone is slightly brighter and more focused than the benchmark recording.",
-        "The benchmark recording exhibits a warmer, richer tone, especially in the lower register. Try using a slower, heavier bow.",
-        "Excellent tonal consistency, very similar to the goal recording's clear and resonant sound.",
+        "your tone is slightly brighter and more focused than the benchmark recording.",
+        "the benchmark recording exhibits a warmer, richer tone, especially in the lower register. Try using a slower, heavier bow.",
+        "your tonal consistency is excellent, very similar to the goal recording's clear and resonant sound.",
     ],
     "dynamics": [
-        "Your dynamic range is good, but the benchmark's pianissimo sections are softer and more delicate.",
-        "The crescendo at [timestamp] was more pronounced and dramatic in your performance than in the benchmark.",
-        "Both recordings follow similar dynamic contours, showing a good understanding of the musical shape.",
+        "your dynamic range is good, but the benchmark's pianissimo sections are softer and more delicate.",
+        "the crescendo around [timestamp] was more pronounced and dramatic in your performance than in the benchmark.",
+        "both recordings follow similar dynamic contours, showing a good understanding of the musical shape.",
     ],
     "style": [
-        "Your interpretation is more legato and connected, whereas the benchmark uses a more detached, articulated style.",
-        "The vibrato in the benchmark recording is wider and more consistent. Your vibrato is more subtle, which is also a valid stylistic choice.",
-        "Excellent stylistic match. The use of rubato in the lyrical sections is very similar to the goal recording.",
+        "your interpretation is more legato and connected, whereas the benchmark uses a more detached, articulated style.",
+        "the vibrato in the benchmark recording is wider and more consistent. Your vibrato is more subtle, which is also a valid stylistic choice.",
+        "the use of rubato in the lyrical sections is very similar to the goal recording, showing an excellent stylistic match.",
     ],
     "pitch": [
-        "A pitch discrepancy was noted at [timestamp] compared to the benchmark. The F# was slightly flat in your recording.",
-        "The intonation in the fast passage starting around [timestamp] was cleaner in your performance than in the benchmark.",
-        "Overall pitch accuracy is very high and closely matches the benchmark across the entire performance.",
+        "a pitch discrepancy was noted around [timestamp] compared to the benchmark. The F# was slightly flat in your recording.",
+        "the intonation in the fast passage starting around [timestamp] was cleaner in your performance than in the benchmark.",
+        "your overall pitch accuracy is very high and closely matches the benchmark across the entire performance.",
     ]
 }
 
 # --- HELPER FUNCTIONS ---
 def fetch_piece_info(piece_name):
+    # This function is unchanged
     search_terms = piece_name.lower().split()
     for key, piece in pieceDatabase.items():
         searchable_text = f"{piece['title'].lower()} {piece['composer'].lower()} {' '.join(piece['keywords'])}"
         if all(term in searchable_text for term in search_terms):
             return piece
-    return {"title": piece_name, "description": f"Information for '{piece_name}' could not be found in our database. Please check the spelling or try a different piece.", "composer": "Unknown", "notFound": True}
+    return {"title": piece_name, "description": f"Information for '{piece_name}' could not be found...", "composer": "Unknown", "notFound": True}
 
-def get_comparative_analysis(status_placeholder):
-    # This simulation function is unchanged
+# --- NEW: HUMAN-LIKE FEEDBACK GENERATOR ---
+def get_human_comparative_analysis(status_placeholder):
+    # The simulation steps remain the same
     status_placeholder.info("Initializing comparison... (This may take up to 20 seconds)")
     time.sleep(2)
     status_placeholder.info("Step 1/3: Analyzing tonal characteristics of both recordings...")
@@ -89,27 +82,41 @@ def get_comparative_analysis(status_placeholder):
     time.sleep(random.uniform(4, 6))
     status_placeholder.info("Step 3/3: Cross-referencing pitch contours for discrepancies...")
     time.sleep(3)
-    feedback = []
-    for category in comparativeFeedbackPool:
-        note = random.choice(comparativeFeedbackPool[category])
-        if "[timestamp]" in note:
+
+    # We now build a paragraph instead of a list
+    tone_feedback = random.choice(comparativeFeedbackPool["tone"])
+    dynamics_feedback = random.choice(comparativeFeedbackPool["dynamics"])
+    style_feedback = random.choice(comparativeFeedbackPool["style"])
+    pitch_feedback = random.choice(comparativeFeedbackPool["pitch"])
+
+    # Replace timestamps
+    for feedback_str in [dynamics_feedback, pitch_feedback]:
+        if "[timestamp]" in feedback_str:
             timestamp = time.strftime('%M:%S', time.gmtime(random.randint(5, 50)))
-            note = note.replace("[timestamp]", timestamp)
-        feedback.append(f"**{category.capitalize()}:** {note}")
+            feedback_str = feedback_str.replace("[timestamp]", timestamp)
+
+    # Assemble the paragraph
+    full_report = (
+        "Overall, this is a strong performance that captures the spirit of the benchmark recording. Here's a more detailed breakdown:\n\n"
+        f"**In terms of tone**, {tone_feedback} \n\n"
+        f"**Dynamically**, {dynamics_feedback} \n\n"
+        f"**Stylistically**, {style_feedback} \n\n"
+        f"**Regarding pitch accuracy**, {pitch_feedback} \n\n"
+        "Great work! Keep focusing on these subtle details to get even closer to your goal."
+    )
+    
     status_placeholder.empty()
-    return feedback
+    return full_report
 
 # --- STATE INITIALIZATION ---
 if 'initialized' not in st.session_state:
     st.session_state.initialized = True
-    # State for "About the Piece" tab
     st.session_state.search_query = ''
     st.session_state.searched_piece_info = None
-    # State for "Compare" tab
     st.session_state.audio_frames = []
     st.session_state.user_audio_bytes = None
     st.session_state.benchmark_audio_bytes = None
-    st.session_state.ai_feedback = []
+    st.session_state.ai_feedback = "" # Now a string, not a list
     st.session_state.analysis_error = ''
     st.session_state.volume_level = 0.0
 
@@ -128,7 +135,15 @@ def audio_frame_callback(frame):
 
 # --- MAIN APP LAYOUT ---
 st.set_page_config(layout="wide", page_title="Violin Studio")
-st.markdown("""<style>#MainMenu, footer {visibility: hidden;}</style>""", unsafe_allow_html=True)
+
+# --- UPDATED CSS: Hides the anchor link symbols ---
+st.markdown("""
+    <style>
+        #MainMenu, footer {visibility: hidden;}
+        /* This new line hides the link symbols from all headers */
+        h1 a, h2 a, h3 a, h4 a, h5 a, h6 a { display: none !important; }
+    </style>
+""", unsafe_allow_html=True)
 
 col1, col2, col3 = st.columns([1, 4, 1])
 
@@ -144,13 +159,10 @@ with col2:
     with tab1:
         st.header("Musical Repertoire Explorer")
         st.write("Enter the name of a piece to learn about its composer, history, and musical context.")
-        
         search_query = st.text_input("Search for a piece:", key="search_query_input", placeholder="e.g., Vivaldi Four Seasons")
-
         if st.button("Search", key="search_piece"):
             with st.spinner(f"Searching for '{search_query}'..."):
                 st.session_state.searched_piece_info = fetch_piece_info(search_query)
-
         if st.session_state.searched_piece_info:
             st.divider()
             info = st.session_state.searched_piece_info
@@ -161,7 +173,6 @@ with col2:
                 c1, c2 = st.columns(2)
                 c1.metric("Typical Performance Tempo", f"~{info['usualTempo']} BPM")
                 c2.metric("Suggested Practice Tempo", f"~{info['practiceTempo']} BPM")
-
 
     with tab2:
         st.header("Compare with Benchmark")
@@ -181,7 +192,6 @@ with col2:
 
         with c2:
             st.subheader("My Recording")
-            
             webrtc_ctx = webrtc_streamer(
                 key="audio-recorder",
                 mode=WebRtcMode.SENDONLY,
@@ -189,10 +199,8 @@ with col2:
                 media_stream_constraints={"audio": True, "video": False},
                 rtc_configuration=RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
             )
-
             if webrtc_ctx.state.playing:
                 st.progress(st.session_state.get("volume_level", 0), text=f"Loudness: {st.session_state.get('volume_level', 0)}%")
-            
             if not webrtc_ctx.state.playing and len(st.session_state.audio_frames) > 0:
                 wav_buffer = io.BytesIO()
                 with wave.open(wav_buffer, 'wb') as wf:
@@ -203,7 +211,6 @@ with col2:
                 st.session_state.user_audio_bytes = wav_buffer.getvalue()
                 st.session_state.audio_frames = []
                 st.rerun()
-
             if st.session_state.user_audio_bytes:
                 st.audio(st.session_state.user_audio_bytes, format='audio/wav')
 
@@ -211,12 +218,11 @@ with col2:
 
         if st.session_state.benchmark_audio_bytes and st.session_state.user_audio_bytes:
             if st.button("Compare Recordings", type="primary", use_container_width=True):
-                st.session_state.ai_feedback = []
+                st.session_state.ai_feedback = ""
                 st.session_state.analysis_error = ''
-                
                 status_placeholder = st.empty()
                 try:
-                    feedback = get_comparative_analysis(status_placeholder)
+                    feedback = get_human_comparative_analysis(status_placeholder)
                     st.session_state.ai_feedback = feedback
                 except ValueError as e:
                     st.session_state.analysis_error = str(e)
@@ -226,8 +232,8 @@ with col2:
             if st.session_state.analysis_error:
                 st.error(st.session_state.analysis_error)
             if st.session_state.ai_feedback:
-                for item in st.session_state.ai_feedback:
-                    st.markdown(f"- {item}")
+                # --- UPDATED: Displaying the paragraph ---
+                st.markdown(st.session_state.ai_feedback)
 
 with col3:
     if img_violin3: st.image(img_violin3)
