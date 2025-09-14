@@ -8,22 +8,7 @@ import matplotlib.pyplot as plt
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 from pathlib import Path
 
-# --- ROBUST IMAGE LOADING ---
-# If you decide to add images back later, this is the correct way to load them.
-# For now, this part of the code is not used in the layout.
-# try:
-#     BASE_DIR = Path(__file__).resolve().parent
-#     PUBLIC_DIR = BASE_DIR / "public"
-#     img_violin1 = open(PUBLIC_DIR / "violin1.jpg", "rb").read()
-#     img_violin2 = open(PUBLIC_DIR / "violin2.jpg", "rb").read()
-#     img_violin3 = open(PUBLIC_DIR / "violin3.jpg", "rb").read()
-#     img_violin4 = open(PUBLIC_DIR / "violin4.jpg", "rb").read()
-# except FileNotFoundError:
-#     # This part is commented out so the app runs without images.
-#     # st.error("Image files not found.")
-#     pass
-
-# --- NEW EXPANDED DATABASE ---
+# --- DATABASE AND SIMULATION LOGIC ---
 pieceDatabase = {
     # Existing entries for reference
     "bach_d_minor_partita": { "composer": "J.S. Bach", "title": "Partita No. 2 in D minor, BWV 1004", "keywords": ["bach", "chaconne"], "description": "A cornerstone of the solo violin repertoire, this partita is renowned for its final movement, the 'Chaconne.' This single movement is a monumental work, demanding profound emotional depth and technical mastery through a continuous set of variations on a bass line.", "usualTempo": 76, "practiceTempo": 60 },
@@ -51,11 +36,22 @@ pieceDatabase = {
     "brahms_violin_concerto": { "composer": "Johannes Brahms", "title": "Violin Concerto in D Major, Op. 77", "keywords": ["brahms"], "description": "Johannes Brahms's only violin concerto is considered one of the three great German violin concertos of the 19th century. It is a monumental work, symphonic in scope, that demands immense technical skill and profound musical maturity from the soloist. The concerto is known for its rich harmonies, complex structure, and the beautiful integration of the solo violin with the orchestra. It is a cornerstone of the violin repertoire, celebrated for its heroic first movement, a deeply expressive adagio, and a fiery, Hungarian-influenced finale.", "usualTempo": 96, "practiceTempo": 76 },
     "tchaikovsky_violin_concerto": { "composer": "Pyotr Ilyich Tchaikovsky", "title": "Violin Concerto in D Major, Op. 35", "keywords": ["tchaikovsky"], "description": "Initially deemed 'unplayable' by its intended dedicatee, Tchaikovsky's Violin Concerto has become one of the most beloved and frequently performed concertos in the world. It is a work of immense passion, filled with beautiful Russian melodies and dazzling virtuosic passages. The first movement is expansive and dramatic, the second is a lyrical and melancholic 'Canzonetta,' and the finale is a thrilling, folk-dance-inspired Allegro Vivacissimo. It is a true test of a violinist's technical and expressive abilities.", "usualTempo": 120, "practiceTempo": 92 },
     "mendelssohn_violin_concerto": { "composer": "Felix Mendelssohn", "title": "Violin Concerto in E minor, Op. 64", "keywords": ["mendelssohn"], "description": "Mendelssohn's Violin Concerto is a masterpiece of the Romantic era, celebrated for its structural innovations and soaring, lyrical melodies. Unlike earlier concertos, it begins with the solo violin immediately stating the main theme, and its movements are connected without pause. The concerto is known for its passionate first movement, a graceful and song-like Andante, and a light, sparkling finale that requires brilliant virtuosity. It demands both technical brilliance and deep musical sensitivity from the soloist.", "usualTempo": 126, "practiceTempo": 100 },
-    # Add other entries as needed, following this format
 }
 
-# --- AUDIO ANALYSIS ENGINE --- (Unchanged)
+# --- HELPER FUNCTIONS ---
+# THIS SECTION WAS LIKELY DELETED ACCIDENTALLY IN YOUR PREVIOUS FILE
+def fetch_piece_info(piece_name):
+    """Searches the database for a piece based on user input."""
+    if not piece_name: return None
+    search_terms = piece_name.lower().split()
+    for key, piece in pieceDatabase.items():
+        searchable_text = f"{piece['title'].lower()} {piece['composer'].lower()} {' '.join(piece['keywords'])}"
+        if all(term in searchable_text for term in search_terms):
+            return piece
+    return {"title": piece_name, "description": f"Information for '{piece_name}' could not be found in our database.", "composer": "Unknown", "notFound": True}
+
 def analyze_audio_features(audio_bytes):
+    """Calculates key features from raw audio bytes."""
     if not audio_bytes: return None
     try:
         with io.BytesIO(audio_bytes) as wav_f:
@@ -74,8 +70,8 @@ def analyze_audio_features(audio_bytes):
                 }
     except Exception: return None
 
-# --- DYNAMIC FEEDBACK GENERATOR --- (Unchanged)
 def get_human_comparative_analysis(benchmark_features, user_features):
+    """Generates a human-like paragraph by comparing real audio features."""
     if not benchmark_features or not user_features: return "Could not analyze one or both audio files."
     tone_comp = "Your tonal character appears similar to the benchmark."
     if user_features["peak_amplitude"] > benchmark_features["peak_amplitude"] * 1.1: tone_comp = "Your sound is brighter and more piercing than the benchmark."
@@ -93,8 +89,8 @@ def get_human_comparative_analysis(benchmark_features, user_features):
         f"**Playing Style:** {style_comp} This reflects the overall expressiveness of the performance."
     )
 
-# --- WAVEFORM PLOTTING FUNCTION --- (Unchanged)
 def plot_waveform(features, title, color):
+    """Creates a matplotlib waveform chart."""
     fig, ax = plt.subplots(figsize=(10, 2))
     time_axis = np.linspace(0, features["duration"], num=len(features["waveform"]))
     ax.plot(time_axis, features["waveform"], color=color, linewidth=0.5)
@@ -104,7 +100,7 @@ def plot_waveform(features, title, color):
     fig.patch.set_facecolor('none'); ax.set_facecolor('none')
     return fig
 
-# --- STATE INITIALIZATION & CALLBACKS --- (Unchanged)
+# --- STATE INITIALIZATION ---
 if 'initialized' not in st.session_state:
     st.session_state.initialized = True
     st.session_state.search_query = ''; st.session_state.searched_piece_info = None
@@ -112,6 +108,7 @@ if 'initialized' not in st.session_state:
     st.session_state.benchmark_audio_bytes = None; st.session_state.ai_feedback = ""
     st.session_state.analysis_error = ''; st.session_state.volume_level = 0.0
 
+# --- CALLBACKS ---
 def handle_benchmark_upload():
     if st.session_state.benchmark_uploader is not None:
         st.session_state.benchmark_audio_bytes = st.session_state.benchmark_uploader.getvalue()
