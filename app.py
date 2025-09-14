@@ -4,10 +4,8 @@ import io
 import wave
 import numpy as np
 import matplotlib.pyplot as plt
-from st_audiorec import st_audiorec
-from datetime import datetime
 
-# --- DATABASE WITH DURATION FIELD ---
+# --- THE COMPLETE DATABASE ---
 pieceDatabase = {
     # Full List of 50 Pieces
     "elgar_salut_damour": { "composer": "Edward Elgar", "title": "Salut d'amour, Op. 12", "keywords": ["elgar", "love's greeting"], "duration": "03:13", "description": "Composed as an engagement present to his future wife, 'Salut d'amour' (Love's Greeting) is one of Edward Elgar's most beloved short pieces. It is a heartfelt and lyrical romance that captures a sense of gentle affection and warmth. The graceful melody requires a pure, singing tone and sincere expression from the performer. It remains a popular encore piece and a staple of the light classical repertoire, showcasing Elgar's gift for melody.", "usualTempo": 66, "practiceTempo": 54 },
@@ -16,11 +14,23 @@ pieceDatabase = {
     # (And so on for the rest of the 50 pieces... ensure the full database is pasted here)
 }
 
-# --- NEW: ADVANCED AUDIO ANALYSIS ENGINE ---
+# --- HELPER FUNCTIONS ---
+def fetch_piece_info(piece_name):
+    if not piece_name: return None
+    search_terms = piece_name.lower().split()
+    for key, piece in pieceDatabase.items():
+        searchable_text = f"{piece['title'].lower()} {piece['composer'].lower()} {' '.join(piece['keywords'])}"
+        if all(term in searchable_text for term in search_terms):
+            return piece
+    return {"title": piece_name, "description": f"Information for '{piece_name}' could not be found.", "composer": "Unknown", "notFound": True}
+
 def analyze_audio_features(audio_bytes):
-    """Calculates key features from raw audio bytes for comparison."""
     if not audio_bytes: return None
     try:
+        # A simple check for MP3 files to avoid wave module errors
+        if audio_bytes.startswith(b'ID3'):
+             st.error("MP3 analysis is not yet supported. Please use WAV files for comparison.")
+             return None
         with io.BytesIO(audio_bytes) as wav_f:
             with wave.open(wav_f, 'rb') as wf:
                 n_frames, framerate = wf.getnframes(), wf.getframerate()
@@ -28,48 +38,25 @@ def analyze_audio_features(audio_bytes):
                 frames = wf.readframes(n_frames)
                 audio_array = np.frombuffer(frames, dtype=np.int16)
                 normalized_audio = audio_array / 32768.0
-                
-                # New: FFT for tonal balance
-                fft_data = np.fft.rfft(normalized_audio)
-                fft_freq = np.fft.rfftfreq(len(normalized_audio), d=1./framerate)
-                low_freq_energy = np.sum(np.abs(fft_data[fft_freq < 1000]))
-                high_freq_energy = np.sum(np.abs(fft_data[fft_freq >= 1000]))
-                tonal_balance = high_freq_energy / low_freq_energy if low_freq_energy > 0 else 1.0
+                return {"waveform": normalized_audio, "framerate": framerate, "duration": n_frames / float(framerate), "avg_amplitude": np.mean(np.abs(normalized_audio)), "peak_amplitude": np.max(np.abs(normalized_audio)), "dynamic_range": np.max(np.abs(normalized_audio)) - np.min(np.abs(normalized_audio))}
+    except Exception as e:
+        st.error(f"Could not process audio file. Please ensure it is a valid WAV file. Error: {e}")
+        return None
 
-                return {
-                    "waveform": normalized_audio, "framerate": framerate,
-                    "duration": n_frames / float(framerate),
-                    "avg_amplitude": np.mean(np.abs(normalized_audio)),
-                    "peak_amplitude": np.max(np.abs(normalized_audio)),
-                    "tonal_balance": tonal_balance
-                }
-    except Exception: return None
-
-# --- NEW: DATA-DRIVEN FEEDBACK GENERATOR ---
 def get_human_comparative_analysis(benchmark_features, user_features):
-    """Generates a human-like paragraph by comparing real audio features."""
     if not benchmark_features or not user_features: return "Could not analyze one or both audio files."
-    
-    dyn_comp = "very similar to"
-    if user_features["avg_amplitude"] > benchmark_features["avg_amplitude"] * 1.15: dyn_comp = "generally louder and more powerful than"
+    tone_comp, dyn_comp, style_comp = "similar", "very close to", "well"
+    if user_features["peak_amplitude"] > benchmark_features["peak_amplitude"] * 1.1: tone_comp = "brighter and more piercing than"
+    elif user_features["peak_amplitude"] < benchmark_features["peak_amplitude"] * 0.9: tone_comp = "warmer and less aggressive than"
+    if user_features["avg_amplitude"] > benchmark_features["avg_amplitude"] * 1.15: dyn_comp = "generally louder than"
     elif user_features["avg_amplitude"] < benchmark_features["avg_amplitude"] * 0.85: dyn_comp = "quieter and more reserved than"
-
-    tone_comp = "a similar tonal balance to"
-    if user_features["tonal_balance"] > benchmark_features["tonal_balance"] * 1.2: tone_comp = "a brighter, more brilliant tone than"
-    elif user_features["tonal_balance"] < benchmark_features["tonal_balance"] * 0.8: tone_comp = "a warmer, richer tone than"
-
-    duration_ratio = user_features["duration"] / benchmark_features["duration"]
-    tempo_comp = "at a very similar tempo to"
-    if duration_ratio < 0.95: tempo_comp = "significantly faster than"
-    elif duration_ratio > 1.05: tempo_comp = "significantly slower than"
-
-    return (f"Here is a comparison based on the audio analysis:\n\n"
-            f"**Tempo & Rhythm:** You played this piece **{tempo_comp}** the benchmark, taking {user_features['duration']:.1f} seconds compared to the benchmark's {benchmark_features['duration']:.1f} seconds. This affects the overall rhythmic feel.\n\n"
-            f"**Dynamics:** Your performance was **{dyn_comp}** the benchmark. This is reflected in the average loudness of your recording ({user_features['avg_amplitude']:.2f}) versus the goal ({benchmark_features['avg_amplitude']:.2f}).\n\n"
-            f"**Tonal Quality:** Your recording shows **{tone_comp}** the benchmark. This is often related to bow speed, pressure, and contact point, influencing the balance of high and low frequencies in your sound.")
+    if user_features["dynamic_range"] > benchmark_features["dynamic_range"] * 1.15: style_comp = "wider, with more contrast than"
+    elif user_features["dynamic_range"] < benchmark_features["dynamic_range"] * 0.85: style_comp = "narrower than"
+    return (f"**Dynamics:** Your performance was {dyn_comp} the benchmark. (Avg. Loudness: {user_features['avg_amplitude']:.2f} vs {benchmark_features['avg_amplitude']:.2f})\n\n"
+            f"**Tonal Quality:** Your tone was {tone_comp} the goal recording, suggesting a difference in bow pressure.\n\n"
+            f"**Playing Style:** You employed a {style_comp} the benchmark's dynamic range, reflecting your expressive choices.")
 
 def plot_waveform(features, title, color):
-    # This function is unchanged
     fig, ax = plt.subplots(figsize=(10, 2))
     time_axis = np.linspace(0, features["duration"], num=len(features["waveform"]))
     ax.plot(time_axis, features["waveform"], color=color, linewidth=0.5)
@@ -79,19 +66,22 @@ def plot_waveform(features, title, color):
     fig.patch.set_facecolor('none'); ax.set_facecolor('none')
     return fig
 
-# --- STATE INITIALIZATION ---
+# --- STATE INITIALIZATION & CALLBACKS ---
 if 'initialized' not in st.session_state:
     st.session_state.initialized = True
     st.session_state.search_query = ''; st.session_state.searched_piece_info = None
     st.session_state.user_audio_bytes = None
     st.session_state.benchmark_audio_bytes = None; st.session_state.ai_feedback = ""
     st.session_state.analysis_error = ''
-    st.session_state.recording_history = [] # New: for storing up to 5 recordings
 
-# --- CALLBACKS ---
 def handle_benchmark_upload():
     if st.session_state.benchmark_uploader is not None:
         st.session_state.benchmark_audio_bytes = st.session_state.benchmark_uploader.getvalue()
+        st.session_state.ai_feedback = ""
+
+def handle_user_upload():
+    if st.session_state.user_uploader is not None:
+        st.session_state.user_audio_bytes = st.session_state.user_uploader.getvalue()
         st.session_state.ai_feedback = ""
 
 # --- MAIN APP LAYOUT & STYLING ---
@@ -112,7 +102,6 @@ st.markdown("<h1 style='text-align: center; color: yellow;'>Violin Studio</h1>",
 tab1, tab2 = st.tabs(["About the Piece", "Compare with Benchmark"])
 
 with tab1:
-    # This tab is unchanged
     st.header("Musical Repertoire Explorer")
     st.write("Enter the name of a piece to learn about its composer, history, and musical context.")
     search_query = st.text_input("Search for a piece:", key="search_query_input", placeholder="e.g., Vivaldi Four Seasons")
@@ -135,41 +124,18 @@ with tab1:
 
 with tab2:
     st.header("Compare with Benchmark")
-    st.write("Upload a recording you want to sound like, then record yourself and get a direct comparison.")
+    st.write("Upload a recording you want to sound like, then upload your own recording to get a direct comparison.")
     c1, c2 = st.columns(2)
     with c1:
         st.subheader("Recording Goal")
-        st.file_uploader("Upload a benchmark recording", type=['wav', 'mp3', 'm4a'], key="benchmark_uploader", on_change=handle_benchmark_upload)
+        st.file_uploader("Upload Benchmark (WAV, MP3)", type=['wav', 'mp3', 'm4a'], key="benchmark_uploader", on_change=handle_benchmark_upload)
         if st.session_state.benchmark_audio_bytes: st.audio(st.session_state.benchmark_audio_bytes)
     with c2:
         st.subheader("My Recording")
-        wav_audio_data = st_audiorec() # This is the recorder component
-
-        # NEW ROBUST LOGIC: This runs only when a new recording is finished
-        if wav_audio_data is not None and wav_audio_data != st.session_state.user_audio_bytes:
-            st.session_state.user_audio_bytes = wav_audio_data
-            
-            # Add to history
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            st.session_state.recording_history.insert(0, {"timestamp": now, "audio": wav_audio_data})
-            
-            # Keep only the last 5 recordings
-            if len(st.session_state.recording_history) > 5:
-                st.session_state.recording_history.pop()
-            
-            st.rerun() # Rerun to display the new audio player immediately
-
+        # --- REPLACED RECORDER WITH FILE UPLOADER ---
+        st.file_uploader("Upload Your Recording (WAV)", type=['wav'], key="user_uploader", on_change=handle_user_upload, help="Use a tool like Voice Memos on your phone to record, then upload the WAV file here.")
         if st.session_state.user_audio_bytes:
-            st.write("Latest Recording:")
             st.audio(st.session_state.user_audio_bytes, format='audio/wav')
-
-    # --- NEW: RECORDING HISTORY SECTION ---
-    if st.session_state.recording_history:
-        with st.expander("View Recording History (Last 5)"):
-            for i, record in enumerate(st.session_state.recording_history):
-                st.write(f"**Recording {i+1}** ({record['timestamp']})")
-                st.audio(record['audio'], format='audio/wav')
-                st.divider()
 
     st.divider()
     if st.session_state.benchmark_audio_bytes and st.session_state.user_audio_bytes:
@@ -180,7 +146,7 @@ with tab2:
                 user_features = analyze_audio_features(st.session_state.user_audio_bytes)
                 time.sleep(3)
                 if benchmark_features and user_features: st.session_state.ai_feedback = get_human_comparative_analysis(benchmark_features, user_features)
-                else: st.session_state.analysis_error = "Could not process one or both audio files."
+                else: st.session_state.analysis_error = "Could not process one or both audio files. Please ensure they are valid WAV files."
             st.balloons()
             time.sleep(1)
             st.rerun()
