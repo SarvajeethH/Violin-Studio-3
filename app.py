@@ -5,10 +5,22 @@ import io
 import wave
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 
+# --- ROBUST IMAGE LOADING ---
+# We load the image bytes directly into memory to avoid path issues on the cloud.
+try:
+    img_violin1 = open("public/violin1.jpg", "rb").read()
+    img_violin2 = open("public/violin2.jpg", "rb").read()
+    img_violin3 = open("public/violin3.jpg", "rb").read()
+    img_violin4 = open("public/violin4.jpg", "rb").read()
+except FileNotFoundError:
+    st.error("Image files not found. Make sure the 'public' folder with images is in your repository root.")
+    # Assign a placeholder or exit if images are critical
+    img_violin1, img_violin2, img_violin3, img_violin4 = None, None, None, None
+
+
 # --- DATABASE AND SIMULATION LOGIC ---
-# (The entire large pieceDatabase from the previous step goes here)
 pieceDatabase = {
-  # For brevity, I'm only showing a few. The full dictionary should be pasted here.
+  # (The entire large pieceDatabase from the previous step goes here)
   "bach_d_minor_partita": { "title": "Partita No. 2 in D minor, BWV 1004", "keywords": ["bach", "chaconne", "ciaccona"], "description": "A cornerstone of the solo violin repertoire by J.S. Bach...", "usualTempo": 76, "practiceTempo": 60 },
   "vivaldi_four_seasons": { "title": "The Four Seasons", "keywords": ["vivaldi", "winter", "spring", "summer", "autumn", "fall"], "description": "A set of four violin concertos by Antonio Vivaldi...", "usualTempo": 100, "practiceTempo": 80 },
   "sarasate_zigeunerweisen": { "title": "Zigeunerweisen, Op. 20", "keywords": ["sarasate", "gypsy airs"], "description": "Pablo de Sarasate's most famous work, a fantasy on Romani themes...", "usualTempo": 138, "practiceTempo": 100 },
@@ -39,7 +51,6 @@ feedbackPool = {
 
 # --- HELPER FUNCTIONS ---
 def fetch_piece_info(piece_name):
-    # This function is unchanged
     search_terms = piece_name.lower().split()
     for key, piece in pieceDatabase.items():
         searchable_text = f"{piece['title'].lower()} {' '.join(piece['keywords'])}"
@@ -48,7 +59,6 @@ def fetch_piece_info(piece_name):
     return {"title": piece_name, "description": "Information for this piece could not be found.", "notFound": True}
 
 def get_advanced_ai_analysis(duration, piece_title, status_placeholder):
-    # This function is unchanged
     status_placeholder.info(f"Initializing analysis for \"{piece_title}\"... (Estimated time: 10-15 seconds)")
     time.sleep(2)
     is_audio_valid = random.random() > 0.1
@@ -74,7 +84,7 @@ def get_advanced_ai_analysis(duration, piece_title, status_placeholder):
 if 'ui_stage' not in st.session_state:
     st.session_state.ui_stage = 'welcome'
     st.session_state.piece_name_input = ''
-    st.session_state.user_tempo_input = 120 # Default value
+    st.session_state.user_tempo_input = 120
     st.session_state.piece_info = None
     st.session_state.tempo_feedback = ''
     st.session_state.audio_frames = []
@@ -92,7 +102,6 @@ def handle_submit_questions():
     with st.spinner("Searching for piece information..."):
         info = fetch_piece_info(st.session_state.piece_name_input)
         st.session_state.piece_info = info
-        # Tempo Analysis
         if st.session_state.user_tempo_input and not info.get("notFound"):
             user_bpm = int(st.session_state.user_tempo_input)
             target_bpm = info['usualTempo']
@@ -108,10 +117,9 @@ def handle_submit_questions():
 
 def handle_move_to_recording():
     st.session_state.ui_stage = 'recording'
-    st.session_state.audio_frames = [] # Clear previous frames
+    st.session_state.audio_frames = []
 
 def handle_start_new_analysis():
-    # Reset all relevant states, keeping the saved audio
     st.session_state.ui_stage = 'questions'
     st.session_state.piece_name_input = ''
     st.session_state.piece_info = None
@@ -126,7 +134,6 @@ def handle_clear_recording():
     st.session_state.audio_bytes = None
     st.session_state.audio_frames = []
 
-# This is the new, robust callback for handling audio frames
 def audio_frame_callback(frame):
     st.session_state.audio_frames.append(frame.to_ndarray().tobytes())
     return frame
@@ -142,18 +149,18 @@ st.markdown("""
         }
         .stButton>button:hover { background-color: #dddddd; transform: scale(1.05); }
         .stButton>button:disabled { background-color: #555; color: #999; }
-        .st-emotion-cache-1gulkj5 { list-style: none; padding-left: 0; } /* Removes bullet points */
+        .st-emotion-cache-1gulkj5 { list-style: none; padding-left: 0; }
     </style>
 """, unsafe_allow_html=True)
 
 col1, col2, col3 = st.columns([1, 4, 1])
 
 with col1:
-    st.image("public/violin1.jpg")
-    st.image("public/violin2.jpg")
+    # Use the pre-loaded image data
+    if img_violin1: st.image(img_violin1)
+    if img_violin2: st.image(img_violin2)
 
 with col2:
-    # --- WELCOME SCREEN ---
     if st.session_state.ui_stage == 'welcome':
         st.title("Violin Studio")
         st.markdown("### Welcome to the AI-Optimized Acoustic Enhancer Dashboard!")
@@ -162,7 +169,6 @@ with col2:
             st.session_state.ui_stage = 'questions'
             st.rerun()
 
-    # --- MAIN INTERACTIVE AREA ---
     if st.session_state.ui_stage != 'welcome':
         st.header("Practice Analysis")
         st.text_input("What piece of music are you playing?", key="piece_name_input", placeholder="e.g., Vivaldi Winter")
@@ -170,7 +176,6 @@ with col2:
         st.button("Submit for Description", on_click=handle_submit_questions)
         st.divider()
 
-        # --- PIECE INFO SECTION ---
         if st.session_state.ui_stage in ['describing', 'recording', 'analyzing', 'feedback'] and st.session_state.piece_info:
             st.subheader(f"About: {st.session_state.piece_info['title']}")
             if st.session_state.tempo_feedback:
@@ -183,11 +188,9 @@ with col2:
             st.button("Move to Recording", on_click=handle_move_to_recording)
             st.divider()
 
-        # --- RECORDER SECTION ---
         if st.session_state.ui_stage in ['recording', 'analyzing', 'feedback']:
             st.subheader("Record Your Performance")
             
-            # The webrtc component now uses a callback to handle audio frames
             webrtc_ctx = webrtc_streamer(
                 key="audio-recorder",
                 mode=WebRtcMode.SENDONLY,
@@ -196,19 +199,14 @@ with col2:
                 rtc_configuration=RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
             )
             
-            # Convert and save audio only when recording stops
             if not webrtc_ctx.state.playing and len(st.session_state.audio_frames) > 0:
-                # Save the current recording before clearing the buffer
                 if st.session_state.audio_bytes:
                     st.session_state.saved_audio_bytes = st.session_state.audio_bytes
-
-                # Get audio parameters from the component context
-                audio_params = webrtc_ctx.audio_receiver.get_stats()["track"]
-                sample_rate = audio_params["sampleRate"]
-                sample_width = 2 # Assuming 16-bit audio
-                channels = audio_params["channels"]
                 
-                # Combine frames and create WAV bytes
+                sample_rate = 48000
+                sample_width = 2
+                channels = 1
+                
                 wav_buffer = io.BytesIO()
                 with wave.open(wav_buffer, 'wb') as wf:
                     wf.setnchannels(channels)
@@ -217,10 +215,9 @@ with col2:
                     wf.writeframes(b''.join(st.session_state.audio_frames))
                 
                 st.session_state.audio_bytes = wav_buffer.getvalue()
-                st.session_state.audio_frames = [] # Clear buffer after processing
-                st.rerun() # Rerun to display the audio player immediately
+                st.session_state.audio_frames = []
+                st.rerun()
             
-            # Display saved and current recordings
             if st.session_state.saved_audio_bytes:
                 st.markdown("##### Previous Recording")
                 st.audio(st.session_state.saved_audio_bytes, format='audio/wav')
@@ -235,7 +232,6 @@ with col2:
             
             st.divider()
 
-        # --- ANALYSIS & FEEDBACK SECTIONS ---
         if st.session_state.ui_stage == 'analyzing':
             status_placeholder = st.empty()
             try:
@@ -261,5 +257,6 @@ with col2:
             st.button("Start New Analysis", on_click=handle_start_new_analysis)
 
 with col3:
-    st.image("public/violin3.jpg")
-    st.image("public/violin4.jpg")
+    # Use the pre-loaded image data
+    if img_violin3: st.image(img_violin3)
+    if img_violin4: st.image(img_violin4)
