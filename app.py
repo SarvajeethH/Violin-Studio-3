@@ -16,15 +16,38 @@ except FileNotFoundError:
     st.error("Image files not found. Make sure the 'public' folder is in your repository root.")
     img_violin1, img_violin2, img_violin3, img_violin4 = None, None, None, None
 
-# --- DATABASES AND SIMULATION LOGIC ---
-# (The entire pieceDatabase from the previous step goes here for the 'Practice with AI' tab)
+# --- DATABASE AND SIMULATION LOGIC ---
+# UPDATED: The database now includes a dedicated 'composer' field for better display.
 pieceDatabase = {
-    "bach_d_minor_partita": { "title": "Partita No. 2 in D minor, BWV 1004", "keywords": ["bach", "chaconne"], "description": "...", "usualTempo": 76, "practiceTempo": 60 },
-    "vivaldi_four_seasons": { "title": "The Four Seasons", "keywords": ["vivaldi", "winter", "spring", "summer", "autumn"], "description": "...", "usualTempo": 100, "practiceTempo": 80 },
-    # PASTE THE REST OF YOUR PIECE DATABASE HERE
+    "bach_d_minor_partita": { 
+        "composer": "J.S. Bach",
+        "title": "Partita No. 2 in D minor, BWV 1004", 
+        "keywords": ["bach", "chaconne"], 
+        "description": "A cornerstone of the solo violin repertoire, this partita is renowned for its final movement, the 'Chaconne.' This single movement is a monumental work, demanding profound emotional depth and technical mastery through a continuous set of variations on a bass line.",
+        "usualTempo": 76, 
+        "practiceTempo": 60 
+    },
+    "vivaldi_four_seasons": { 
+        "composer": "Antonio Vivaldi",
+        "title": "The Four Seasons", 
+        "keywords": ["vivaldi", "winter", "spring", "summer", "autumn"], 
+        "description": "A set of four violin concertos, each giving musical expression to a season of the year. They are among the most famous works of the Baroque period, known for their programmatic and innovative instrumental writing, which was revolutionary for its time.",
+        "usualTempo": 100, 
+        "practiceTempo": 80 
+    },
+    "sarasate_zigeunerweisen": { 
+        "composer": "Pablo de Sarasate",
+        "title": "Zigeunerweisen, Op. 20", 
+        "keywords": ["sarasate", "gypsy airs"], 
+        "description": "Sarasate's most famous work, Zigeunerweisen (Gypsy Airs) is a fantasy on Romani themes. It features a slow, improvisatory, and soulful introduction followed by an incredibly fast, virtuosic finale that demands technical fireworks and a fiery, passionate character.",
+        "usualTempo": 138, 
+        "practiceTempo": 100 
+    },
+    # PASTE THE REST OF YOUR PIECE DATABASE HERE, ADDING A "composer" TO EACH
 }
 
 comparativeFeedbackPool = {
+    # This dictionary remains unchanged
     "tone": [
         "Your tone is slightly brighter and more focused than the benchmark recording.",
         "The benchmark recording exhibits a warmer, richer tone, especially in the lower register. Try using a slower, heavier bow.",
@@ -51,12 +74,13 @@ comparativeFeedbackPool = {
 def fetch_piece_info(piece_name):
     search_terms = piece_name.lower().split()
     for key, piece in pieceDatabase.items():
-        searchable_text = f"{piece['title'].lower()} {' '.join(piece['keywords'])}"
+        searchable_text = f"{piece['title'].lower()} {piece['composer'].lower()} {' '.join(piece['keywords'])}"
         if all(term in searchable_text for term in search_terms):
             return piece
-    return {"title": piece_name, "description": "Information for this piece could not be found.", "notFound": True}
+    return {"title": piece_name, "description": f"Information for '{piece_name}' could not be found in our database. Please check the spelling or try a different piece.", "composer": "Unknown", "notFound": True}
 
 def get_comparative_analysis(status_placeholder):
+    # This simulation function is unchanged
     status_placeholder.info("Initializing comparison... (This may take up to 20 seconds)")
     time.sleep(2)
     status_placeholder.info("Step 1/3: Analyzing tonal characteristics of both recordings...")
@@ -76,16 +100,14 @@ def get_comparative_analysis(status_placeholder):
     return feedback
 
 # --- STATE INITIALIZATION ---
-# This ensures all necessary keys are always present in the session state.
 if 'initialized' not in st.session_state:
     st.session_state.initialized = True
-    st.session_state.app_mode = "Practice with AI"
-    st.session_state.piece_name_input = ''
-    st.session_state.user_tempo_input = 120
-    st.session_state.piece_info = None
+    # State for "About the Piece" tab
+    st.session_state.search_query = ''
+    st.session_state.searched_piece_info = None
+    # State for "Compare" tab
     st.session_state.audio_frames = []
     st.session_state.user_audio_bytes = None
-    st.session_state.saved_user_audio_bytes = None
     st.session_state.benchmark_audio_bytes = None
     st.session_state.ai_feedback = []
     st.session_state.analysis_error = ''
@@ -100,7 +122,6 @@ def audio_frame_callback(frame):
     audio_data = frame.to_ndarray()
     rms = np.sqrt(np.mean(np.square(audio_data)))
     volume = min(100, int(rms * 500))
-    # Use a thread-safe way to update session state from a callback
     st.session_state["volume_level"] = volume
     st.session_state.audio_frames.append(audio_data.tobytes())
     return frame
@@ -118,12 +139,29 @@ with col1:
 with col2:
     st.title("Violin Studio")
     
-    tab1, tab2 = st.tabs(["Practice with AI", "Compare with Benchmark"])
+    tab1, tab2 = st.tabs(["About the Piece", "Compare with Benchmark"])
 
     with tab1:
-        st.header("Practice with AI")
-        st.info("This feature allows you to look up a piece and get simulated feedback. (Feature from previous version can be integrated here).")
-        st.write("---")
+        st.header("Musical Repertoire Explorer")
+        st.write("Enter the name of a piece to learn about its composer, history, and musical context.")
+        
+        search_query = st.text_input("Search for a piece:", key="search_query_input", placeholder="e.g., Vivaldi Four Seasons")
+
+        if st.button("Search", key="search_piece"):
+            with st.spinner(f"Searching for '{search_query}'..."):
+                st.session_state.searched_piece_info = fetch_piece_info(search_query)
+
+        if st.session_state.searched_piece_info:
+            st.divider()
+            info = st.session_state.searched_piece_info
+            st.subheader(info['title'])
+            st.markdown(f"**Composer:** {info['composer']}")
+            st.markdown(f"**About the Piece:** {info['description']}")
+            if not info.get("notFound"):
+                c1, c2 = st.columns(2)
+                c1.metric("Typical Performance Tempo", f"~{info['usualTempo']} BPM")
+                c2.metric("Suggested Practice Tempo", f"~{info['practiceTempo']} BPM")
+
 
     with tab2:
         st.header("Compare with Benchmark")
@@ -155,11 +193,7 @@ with col2:
             if webrtc_ctx.state.playing:
                 st.progress(st.session_state.get("volume_level", 0), text=f"Loudness: {st.session_state.get('volume_level', 0)}%")
             
-            # ROBUST LOGIC: Process audio frames only when recording stops and frames are available.
             if not webrtc_ctx.state.playing and len(st.session_state.audio_frames) > 0:
-                if st.session_state.user_audio_bytes:
-                    st.session_state.saved_user_audio_bytes = st.session_state.user_audio_bytes
-                
                 wav_buffer = io.BytesIO()
                 with wave.open(wav_buffer, 'wb') as wf:
                     wf.setnchannels(1)
@@ -167,7 +201,7 @@ with col2:
                     wf.setframerate(48000)
                     wf.writeframes(b''.join(st.session_state.audio_frames))
                 st.session_state.user_audio_bytes = wav_buffer.getvalue()
-                st.session_state.audio_frames = [] # IMPORTANT: Clear frames after processing
+                st.session_state.audio_frames = []
                 st.rerun()
 
             if st.session_state.user_audio_bytes:
@@ -175,7 +209,6 @@ with col2:
 
         st.divider()
 
-        # --- COMPARISON ANALYSIS SECTION ---
         if st.session_state.benchmark_audio_bytes and st.session_state.user_audio_bytes:
             if st.button("Compare Recordings", type="primary", use_container_width=True):
                 st.session_state.ai_feedback = []
