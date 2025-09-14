@@ -132,7 +132,6 @@ with tab2:
         if st.session_state.benchmark_audio_bytes: st.audio(st.session_state.benchmark_audio_bytes)
     with c2:
         st.subheader("My Recording")
-        # --- REPLACED RECORDER WITH FILE UPLOADER ---
         st.file_uploader("Upload Your Recording (WAV)", type=['wav'], key="user_uploader", on_change=handle_user_upload, help="Use a tool like Voice Memos on your phone to record, then upload the WAV file here.")
         if st.session_state.user_audio_bytes:
             st.audio(st.session_state.user_audio_bytes, format='audio/wav')
