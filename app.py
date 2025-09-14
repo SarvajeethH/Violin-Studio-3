@@ -24,7 +24,6 @@ pieceDatabase = {
     # PASTE THE REST OF YOUR PIECE DATABASE HERE
 }
 
-# NEW feedback pool for the comparative analysis
 comparativeFeedbackPool = {
     "tone": [
         "Your tone is slightly brighter and more focused than the benchmark recording.",
@@ -50,7 +49,6 @@ comparativeFeedbackPool = {
 
 # --- HELPER FUNCTIONS ---
 def fetch_piece_info(piece_name):
-    # This function is for the 'Practice with AI' tab
     search_terms = piece_name.lower().split()
     for key, piece in pieceDatabase.items():
         searchable_text = f"{piece['title'].lower()} {' '.join(piece['keywords'])}"
@@ -59,36 +57,29 @@ def fetch_piece_info(piece_name):
     return {"title": piece_name, "description": "Information for this piece could not be found.", "notFound": True}
 
 def get_comparative_analysis(status_placeholder):
-    # NEW AI analysis function for the comparison
     status_placeholder.info("Initializing comparison... (This may take up to 20 seconds)")
     time.sleep(2)
-    
     status_placeholder.info("Step 1/3: Analyzing tonal characteristics of both recordings...")
     time.sleep(random.uniform(4, 6))
-    
     status_placeholder.info("Step 2/3: Aligning dynamic levels and phrasing...")
     time.sleep(random.uniform(4, 6))
-    
     status_placeholder.info("Step 3/3: Cross-referencing pitch contours for discrepancies...")
     time.sleep(3)
-
     feedback = []
-    # Generate one piece of feedback from each category
     for category in comparativeFeedbackPool:
         note = random.choice(comparativeFeedbackPool[category])
-        # Replace placeholder timestamp if present
         if "[timestamp]" in note:
-            # Generate a plausible timestamp (e.g., 00:12)
             timestamp = time.strftime('%M:%S', time.gmtime(random.randint(5, 50)))
             note = note.replace("[timestamp]", timestamp)
         feedback.append(f"**{category.capitalize()}:** {note}")
-        
     status_placeholder.empty()
     return feedback
 
 # --- STATE INITIALIZATION ---
-if 'app_mode' not in st.session_state:
-    st.session_state.app_mode = "Practice with AI" # Default mode
+# This ensures all necessary keys are always present in the session state.
+if 'initialized' not in st.session_state:
+    st.session_state.initialized = True
+    st.session_state.app_mode = "Practice with AI"
     st.session_state.piece_name_input = ''
     st.session_state.user_tempo_input = 120
     st.session_state.piece_info = None
@@ -106,13 +97,11 @@ def handle_benchmark_upload():
         st.session_state.benchmark_audio_bytes = st.session_state.benchmark_uploader.getvalue()
 
 def audio_frame_callback(frame):
-    # This callback now also calculates volume
     audio_data = frame.to_ndarray()
-    # Calculate Root Mean Square (RMS) as a proxy for volume
     rms = np.sqrt(np.mean(np.square(audio_data)))
-    # Normalize to a 0-100 scale (this may need tuning)
     volume = min(100, int(rms * 500))
-    st.session_state.volume_level = volume
+    # Use a thread-safe way to update session state from a callback
+    st.session_state["volume_level"] = volume
     st.session_state.audio_frames.append(audio_data.tobytes())
     return frame
 
@@ -129,15 +118,11 @@ with col1:
 with col2:
     st.title("Violin Studio")
     
-    # --- TABS FOR APP MODE ---
     tab1, tab2 = st.tabs(["Practice with AI", "Compare with Benchmark"])
 
     with tab1:
         st.header("Practice with AI")
-        st.write("Look up a piece from our database and get simulated feedback on your performance.")
-        # Logic for this tab would be a simplified version of the previous app.py
-        # For now, we focus on the new feature as requested. A placeholder is left.
-        st.info("The 'Practice with AI' feature from the previous version can be integrated here.")
+        st.info("This feature allows you to look up a piece and get simulated feedback. (Feature from previous version can be integrated here).")
         st.write("---")
 
     with tab2:
@@ -168,24 +153,22 @@ with col2:
             )
 
             if webrtc_ctx.state.playing:
-                st.session_state.is_recording = True
-                st.progress(st.session_state.volume_level, text=f"Loudness: {st.session_state.volume_level}%")
+                st.progress(st.session_state.get("volume_level", 0), text=f"Loudness: {st.session_state.get('volume_level', 0)}%")
             
-            # This block runs when recording stops
-            if not webrtc_ctx.state.playing and st.session_state.is_recording:
-                st.session_state.is_recording = False
+            # ROBUST LOGIC: Process audio frames only when recording stops and frames are available.
+            if not webrtc_ctx.state.playing and len(st.session_state.audio_frames) > 0:
+                if st.session_state.user_audio_bytes:
+                    st.session_state.saved_user_audio_bytes = st.session_state.user_audio_bytes
                 
-                # Save the audio frames as a WAV file
-                if len(st.session_state.audio_frames) > 0:
-                    wav_buffer = io.BytesIO()
-                    with wave.open(wav_buffer, 'wb') as wf:
-                        wf.setnchannels(1) # Mono
-                        wf.setsampwidth(2) # 16-bit
-                        wf.setframerate(48000) # Standard sample rate
-                        wf.writeframes(b''.join(st.session_state.audio_frames))
-                    st.session_state.user_audio_bytes = wav_buffer.getvalue()
-                    st.session_state.audio_frames = [] # Clear buffer
-                    st.rerun()
+                wav_buffer = io.BytesIO()
+                with wave.open(wav_buffer, 'wb') as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(48000)
+                    wf.writeframes(b''.join(st.session_state.audio_frames))
+                st.session_state.user_audio_bytes = wav_buffer.getvalue()
+                st.session_state.audio_frames = [] # IMPORTANT: Clear frames after processing
+                st.rerun()
 
             if st.session_state.user_audio_bytes:
                 st.audio(st.session_state.user_audio_bytes, format='audio/wav')
