@@ -64,7 +64,7 @@ pieceDatabase = {
     "mendelssohn_violin_concerto_3": { "composer": "Felix Mendelssohn", "title": "Violin Concerto, Op. 64: III. Allegro molto vivace", "keywords": ["mendelssohn", "concerto", "vivace"], "duration": "06:50", "description": "The finale of Mendelssohn's Violin Concerto is a light, sparkling, and virtuosic Allegro molto vivace. It has a scherzo-like character, with a sense of playful energy and elfin grace that is characteristic of Mendelssohn's style. The movement is a brilliant showcase for the soloist's agility and technical skill, with rapid passagework and a light, crisp bowing style. It brings the concerto to a joyful and exhilarating conclusion.", "usualTempo": 168, "practiceTempo": 134 },
 }
 
-# --- HELPER FUNCTIONS --- (Unchanged)
+# --- HELPER FUNCTIONS ---
 def fetch_piece_info(piece_name):
     if not piece_name: return None
     search_terms = piece_name.lower().split()
@@ -109,7 +109,7 @@ def plot_waveform(features, title, color):
     fig.patch.set_facecolor('none'); ax.set_facecolor('none')
     return fig
 
-# --- STATE INITIALIZATION & CALLBACKS --- (Unchanged)
+# --- STATE INITIALIZATION & CALLBACKS ---
 if 'initialized' not in st.session_state:
     st.session_state.initialized = True
     st.session_state.search_query = ''; st.session_state.searched_piece_info = None
