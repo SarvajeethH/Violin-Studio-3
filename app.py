@@ -5,16 +5,16 @@ import io
 import wave
 import numpy as np
 import matplotlib.pyplot as plt
-from st_audiorec import st_audiorec
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 from pathlib import Path
 
 # --- THE COMPLETE DATABASE ---
 pieceDatabase = {
-    # Base Pieces
+    # Original Base Pieces
     "bach_d_minor_partita": { "composer": "J.S. Bach", "title": "Partita No. 2 in D minor, BWV 1004", "keywords": ["bach", "chaconne"], "duration": "14:00+", "description": "A cornerstone of the solo violin repertoire, this partita is renowned for its final movement, the 'Chaconne.' This single movement is a monumental work, demanding profound emotional depth and technical mastery through a continuous set of variations on a bass line.", "usualTempo": 76, "practiceTempo": 60 },
     
-    # Full List of 50 Pieces
-    "elgar_salut_damour": { "composer": "Edward Elgar", "title": "Salut d'amour, Op. 12", "keywords": ["elgar", "love's greeting"], "duration": "03:13", "description": "Composed as an engagement present to his future wife, 'Salut d'amour' (Love's Greeting) is one of Edward Elgar's most beloved short pieces. It is a heartfelt and lyrical romance that captures a sense of gentle affection and warmth. The graceful melody requires a pure, singing tone and sincere expression from the performer. It remains a popular encore piece and a staple of the light classical repertoire, showcasing Elgar's gift for melody.", "usualTempo": 66, "practiceTempo": 54 },
+    # Complete list of 50 Pieces
+    "elgar_salut_damour": { "composer": "Edward Elgar", "title": "Salut d'amour, Op. 12", "keywords": ["elgar", "love's greeting"], "duration": "03:13", "description": "Composed as an engagement present to his future wife, 'Salut d'amour' (Love's Greeting) is one of Elgar's most beloved short pieces. It is a heartfelt and lyrical romance that captures a sense of gentle affection and warmth. The graceful melody requires a pure, singing tone and sincere expression from the performer. It remains a popular encore piece and a staple of the light classical repertoire, showcasing Elgar's gift for melody.", "usualTempo": 66, "practiceTempo": 54 },
     "chopin_nocturne_op9_no2": { "composer": "Frédéric Chopin", "title": "Nocturne in E-flat Major, Op. 9 No. 2", "keywords": ["chopin", "nocturne", "op9", "no2"], "duration": "04:41", "description": "Arguably the most famous of all his nocturnes, this piece is a quintessential example of the Romantic piano style, here beautifully transcribed for violin. The main theme is a deeply lyrical and ornamented melody that flows with grace and elegance. It requires a beautiful, singing tone and a flexible sense of rhythm (rubato) to capture its poetic nature. The piece's structure is relatively simple, allowing the performer to focus on expressive phrasing and delicate nuance.", "usualTempo": 60, "practiceTempo": 50 },
     "debussy_clair_de_lune": { "composer": "Claude Debussy", "title": "Clair de Lune", "keywords": ["debussy", "bergamasque"], "duration": "04:38", "description": "The third and most celebrated movement of the 'Suite bergamasque,' 'Clair de Lune' is one of the most iconic pieces of Impressionist music. Its name, meaning 'moonlight,' perfectly captures the music's delicate, atmospheric, and dreamlike quality. The piece requires exceptional control over dynamics and tone color to create its shimmering textures. The fluid, almost improvisatory-sounding melody floats above rich and innovative harmonies, evoking a serene and magical nighttime scene.", "usualTempo": 50, "practiceTempo": 40 },
     "debussy_fille_cheveux_lin": { "composer": "Claude Debussy", "title": "La Fille aux Cheveux de Lin", "keywords": ["debussy", "flaxen hair"], "duration": "03:03", "description": "This piece, whose title means 'The Girl with the Flaxen Hair,' is the eighth prelude from Debussy's first book of Préludes. It is a work of simple, tender beauty, characterized by a gentle and lyrical melody. The music is known for its use of pentatonic scales, which gives it a folk-like, innocent quality. Performing this piece requires a pure, sweet tone and a delicate touch to convey its sense of peaceful intimacy and serene beauty.", "usualTempo": 66, "practiceTempo": 54 },
@@ -64,7 +64,7 @@ pieceDatabase = {
     "mendelssohn_violin_concerto_3": { "composer": "Felix Mendelssohn", "title": "Violin Concerto, Op. 64: III. Allegro molto vivace", "keywords": ["mendelssohn", "concerto", "vivace"], "duration": "06:50", "description": "The finale of Mendelssohn's Violin Concerto is a light, sparkling, and virtuosic Allegro molto vivace. It has a scherzo-like character, with a sense of playful energy and elfin grace that is characteristic of Mendelssohn's style. The movement is a brilliant showcase for the soloist's agility and technical skill, with rapid passagework and a light, crisp bowing style. It brings the concerto to a joyful and exhilarating conclusion.", "usualTempo": 168, "practiceTempo": 134 },
 }
 
-# --- HELPER FUNCTIONS ---
+# --- HELPER FUNCTIONS --- (Unchanged)
 def fetch_piece_info(piece_name):
     if not piece_name: return None
     search_terms = piece_name.lower().split()
@@ -109,18 +109,26 @@ def plot_waveform(features, title, color):
     fig.patch.set_facecolor('none'); ax.set_facecolor('none')
     return fig
 
-# --- STATE INITIALIZATION & CALLBACKS ---
+# --- STATE INITIALIZATION & CALLBACKS --- (Unchanged)
 if 'initialized' not in st.session_state:
     st.session_state.initialized = True
     st.session_state.search_query = ''; st.session_state.searched_piece_info = None
-    st.session_state.user_audio_bytes = None
+    st.session_state.audio_frames = []; st.session_state.user_audio_bytes = None
     st.session_state.benchmark_audio_bytes = None; st.session_state.ai_feedback = ""
-    st.session_state.analysis_error = ''
+    st.session_state.analysis_error = ''; st.session_state.volume_level = 0.0
 
 def handle_benchmark_upload():
     if st.session_state.benchmark_uploader is not None:
         st.session_state.benchmark_audio_bytes = st.session_state.benchmark_uploader.getvalue()
         st.session_state.ai_feedback = ""
+
+def audio_frame_callback(frame):
+    audio_data = frame.to_ndarray()
+    rms = np.sqrt(np.mean(np.square(audio_data)))
+    volume = min(100, int(rms * 500))
+    st.session_state["volume_level"] = volume
+    st.session_state.audio_frames.append(audio_data.tobytes())
+    return frame
 
 # --- MAIN APP LAYOUT & STYLING ---
 st.set_page_config(layout="centered", page_title="Violin Studio")
@@ -172,11 +180,17 @@ with tab2:
         if st.session_state.benchmark_audio_bytes: st.audio(st.session_state.benchmark_audio_bytes)
     with c2:
         st.subheader("My Recording")
-        wav_audio_data = st_audiorec()
-        if wav_audio_data is not None:
-            st.session_state.user_audio_bytes = wav_audio_data
-        if st.session_state.user_audio_bytes:
-            st.audio(st.session_state.user_audio_bytes, format='audio/wav')
+        webrtc_ctx = webrtc_streamer(key="audio-recorder", mode=WebRtcMode.SENDONLY, audio_frame_callback=audio_frame_callback, media_stream_constraints={"audio": True, "video": False})
+        if webrtc_ctx.state.playing: st.progress(st.session_state.get("volume_level", 0), text=f"Loudness: {st.session_state.get('volume_level', 0)}%")
+        if not webrtc_ctx.state.playing and len(st.session_state.audio_frames) > 0:
+            wav_buffer = io.BytesIO()
+            with wave.open(wav_buffer, 'wb') as wf:
+                wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(48000)
+                wf.writeframes(b''.join(st.session_state.audio_frames))
+            st.session_state.user_audio_bytes = wav_buffer.getvalue()
+            st.session_state.audio_frames = []
+            st.rerun()
+        if st.session_state.user_audio_bytes: st.audio(st.session_state.user_audio_bytes, format='audio/wav')
     st.divider()
     if st.session_state.benchmark_audio_bytes and st.session_state.user_audio_bytes:
         if st.button("Compare Recordings", type="primary", use_container_width=True):
