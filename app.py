@@ -59,7 +59,7 @@ pieceDatabase = {
     "mendelssohn_violin_concerto_3": { "composer": "Felix Mendelssohn", "title": "Violin Concerto, Op. 64: III. Allegro molto vivace", "keywords": ["mendelssohn", "concerto", "vivace"], "duration": "06:50", "description": "The finale of Mendelssohn's Violin Concerto is a light, sparkling, and virtuosic Allegro molto vivace. It has a scherzo-like character, with a sense of playful energy and elfin grace that is characteristic of Mendelssohn's style. The movement is a brilliant showcase for the soloist's agility and technical skill, with rapid passagework and a light, crisp bowing style. It brings the concerto to a joyful and exhilarating conclusion.", "usualTempo": 168, "practiceTempo": 134 },
 }
 
-# --- HELPER FUNCTIONS ---
+# --- HELPER FUNCTIONS --- (Unchanged)
 def fetch_piece_info(piece_name):
     if not piece_name: return None
     search_terms = piece_name.lower().split()
@@ -134,7 +134,7 @@ def create_audio_input_section(title, type_key):
         uploaded_file = st.file_uploader(f"Upload {type_key.capitalize()} Audio", type=['wav', 'mp3', 'm4a'], key=f"{type_key}_uploader")
         if uploaded_file:
             audio_bytes = uploaded_file.getvalue()
-            if audio_bytes != st.session_state[f"{type_key}_audio_bytes"]:
+            if audio_bytes != st.session_state.get(f"{type_key}_audio_bytes"):
                 st.session_state[f"{type_key}_audio_bytes"] = audio_bytes
                 add_to_history(f"{type_key}_history", audio_bytes, uploaded_file.name)
                 st.rerun()
@@ -151,10 +151,10 @@ def create_audio_input_section(title, type_key):
             st.session_state.audio_frames = [] # Clear buffer
             add_to_history(f"{type_key}_history", st.session_state[f"{type_key}_audio_bytes"], "Live Recording")
             st.rerun()
-    if st.session_state[f"{type_key}_audio_bytes"]:
+    if st.session_state.get(f"{type_key}_audio_bytes"):
         st.write(f"**Current {type_key.capitalize()}:**")
         st.audio(st.session_state[f"{type_key}_audio_bytes"])
-    if st.session_state[f"{type_key}_history"]:
+    if st.session_state.get(f"{type_key}_history"):
         with st.expander("View History (Last 5)"):
             for record in st.session_state[f"{type_key}_history"]:
                 st.write(f"{record['name']} ({record['timestamp']})")
