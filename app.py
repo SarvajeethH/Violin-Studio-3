@@ -6,7 +6,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 from pydub import AudioSegment
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 
 # --- THE COMPLETE DATABASE (NO ABBREVIATIONS) ---
 pieceDatabase = {
@@ -131,8 +130,6 @@ def add_to_history(history_key, audio_bytes, source_name):
 
 def create_audio_input_section(title, type_key):
     st.subheader(title)
-    
-    # Option 1: Upload
     with st.expander(f"Upload an Audio File"):
         uploaded_file = st.file_uploader(f"Upload {type_key.capitalize()} Audio", type=['wav', 'mp3', 'm4a'], key=f"{type_key}_uploader")
         if uploaded_file:
@@ -141,13 +138,10 @@ def create_audio_input_section(title, type_key):
                 st.session_state[f"{type_key}_audio_bytes"] = audio_bytes
                 add_to_history(f"{type_key}_history", audio_bytes, uploaded_file.name)
                 st.rerun()
-
-    # Option 2: Record
     with st.expander(f"Record Live Audio"):
         webrtc_ctx = webrtc_streamer(key=f"{type_key}_recorder", mode=WebRtcMode.SENDONLY, audio_frame_callback=audio_frame_callback, media_stream_constraints={"audio": True, "video": False})
         if webrtc_ctx.state.playing:
             st.progress(st.session_state.get("volume_level", 0), text=f"Recording... {st.session_state.get('volume_level', 0)}%")
-        
         if not webrtc_ctx.state.playing and len(st.session_state.get("audio_frames", [])) > 0:
             wav_buffer = io.BytesIO()
             with wave.open(wav_buffer, 'wb') as wf:
@@ -157,12 +151,9 @@ def create_audio_input_section(title, type_key):
             st.session_state.audio_frames = [] # Clear buffer
             add_to_history(f"{type_key}_history", st.session_state[f"{type_key}_audio_bytes"], "Live Recording")
             st.rerun()
-
-    # Display current audio and history
     if st.session_state[f"{type_key}_audio_bytes"]:
         st.write(f"**Current {type_key.capitalize()}:**")
         st.audio(st.session_state[f"{type_key}_audio_bytes"])
-    
     if st.session_state[f"{type_key}_history"]:
         with st.expander("View History (Last 5)"):
             for record in st.session_state[f"{type_key}_history"]:
@@ -198,19 +189,10 @@ with tab1:
         st.divider()
         st.subheader(info['title'])
         st.caption(f"By {info['composer']}")
-        st.divider()
-        col_duration, col_tempo1, col_tempo2 = st.columns(3)
-        if info.get("duration"): col_duration.metric(label="Typical Duration", value=info['duration'])
-        if not info.get("notFound"):
-            col_tempo1.metric(label="Performance Tempo", value=f"~{info['usualTempo']} BPM")
-            col_tempo2.metric(label="Practice Tempo", value=f"~{info['practiceTempo']} BPM")
-        with st.expander("📖 Read Full Description and History"):
-            st.markdown(info['description'])
 
 with tab2:
     st.header("Compare with Benchmark")
     st.write("Provide a goal recording and your own performance, then get a direct comparison.")
-    
     c1, c2 = st.columns(2)
     with c1:
         create_audio_input_section("Recording Goal", "benchmark")
@@ -222,7 +204,7 @@ with tab2:
     if st.session_state.benchmark_audio_bytes and st.session_state.user_audio_bytes:
         if st.button("Compare Recordings", type="primary", use_container_width=True):
             st.session_state.ai_feedback, st.session_state.analysis_error = "", ""
-            with st.spinner("AI is analyzing your performance..."):
+            with st.spinner("AI is analyzing your performance... This may take a moment."):
                 benchmark_features = analyze_audio_features(st.session_state.benchmark_audio_bytes)
                 user_features = analyze_audio_features(st.session_state.user_audio_bytes)
                 time.sleep(2)
