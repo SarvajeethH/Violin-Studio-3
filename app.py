@@ -4,16 +4,12 @@ import io
 import wave
 import numpy as np
 import matplotlib.pyplot as plt
-from st_audiorec import st_audiorec
 from datetime import datetime
 from pydub import AudioSegment
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 
 # --- THE COMPLETE DATABASE (NO ABBREVIATIONS) ---
 pieceDatabase = {
-    # Base Pieces
-    "bach_d_minor_partita": { "composer": "J.S. Bach", "title": "Partita No. 2 in D minor, BWV 1004", "keywords": ["bach", "chaconne"], "duration": "14:00+", "description": "A cornerstone of the solo violin repertoire, this partita is renowned for its final movement, the 'Chaconne.' This single movement is a monumental work, demanding profound emotional depth and technical mastery through a continuous set of variations on a bass line.", "usualTempo": 76, "practiceTempo": 60 },
-    
-    # Full List of 50 Pieces
     "elgar_salut_damour": { "composer": "Edward Elgar", "title": "Salut d'amour, Op. 12", "keywords": ["elgar", "love's greeting"], "duration": "03:13", "description": "Composed as an engagement present to his future wife, 'Salut d'amour' (Love's Greeting) is one of Edward Elgar's most beloved short pieces. It is a heartfelt and lyrical romance that captures a sense of gentle affection and warmth. The graceful melody requires a pure, singing tone and sincere expression from the performer. It remains a popular encore piece and a staple of the light classical repertoire, showcasing Elgar's gift for melody.", "usualTempo": 66, "practiceTempo": 54 },
     "chopin_nocturne_op9_no2": { "composer": "Frédéric Chopin", "title": "Nocturne in E-flat Major, Op. 9 No. 2", "keywords": ["chopin", "nocturne", "op9", "no2"], "duration": "04:41", "description": "Arguably the most famous of all his nocturnes, this piece is a quintessential example of the Romantic piano style, here beautifully transcribed for violin. The main theme is a deeply lyrical and ornamented melody that flows with grace and elegance. It requires a beautiful, singing tone and a flexible sense of rhythm (rubato) to capture its poetic nature. The piece's structure is relatively simple, allowing the performer to focus on expressive phrasing and delicate nuance.", "usualTempo": 60, "practiceTempo": 50 },
     "debussy_clair_de_lune": { "composer": "Claude Debussy", "title": "Clair de Lune", "keywords": ["debussy", "bergamasque"], "duration": "04:38", "description": "The third and most celebrated movement of the 'Suite bergamasque,' 'Clair de Lune' is one of the most iconic pieces of Impressionist music. Its name, meaning 'moonlight,' perfectly captures the music's delicate, atmospheric, and dreamlike quality. The piece requires exceptional control over dynamics and tone color to create its shimmering textures. The fluid, almost improvisatory-sounding melody floats above rich and innovative harmonies, evoking a serene and magical nighttime scene.", "usualTempo": 50, "practiceTempo": 40 },
@@ -64,7 +60,7 @@ pieceDatabase = {
     "mendelssohn_violin_concerto_3": { "composer": "Felix Mendelssohn", "title": "Violin Concerto, Op. 64: III. Allegro molto vivace", "keywords": ["mendelssohn", "concerto", "vivace"], "duration": "06:50", "description": "The finale of Mendelssohn's Violin Concerto is a light, sparkling, and virtuosic Allegro molto vivace. It has a scherzo-like character, with a sense of playful energy and elfin grace that is characteristic of Mendelssohn's style. The movement is a brilliant showcase for the soloist's agility and technical skill, with rapid passagework and a light, crisp bowing style. It brings the concerto to a joyful and exhilarating conclusion.", "usualTempo": 168, "practiceTempo": 134 },
 }
 
-# --- HELPER FUNCTIONS --- (Unchanged)
+# --- HELPER FUNCTIONS ---
 def fetch_piece_info(piece_name):
     if not piece_name: return None
     search_terms = piece_name.lower().split()
@@ -77,27 +73,34 @@ def fetch_piece_info(piece_name):
 def analyze_audio_features(audio_bytes):
     if not audio_bytes: return None
     try:
-        with io.BytesIO(audio_bytes) as wav_f:
-            with wave.open(wav_f, 'rb') as wf:
-                n_frames, framerate = wf.getnframes(), wf.getframerate()
-                if n_frames == 0: return None
-                frames, audio_array = wf.readframes(n_frames), np.frombuffer(frames, dtype=np.int16)
-                normalized_audio = audio_array / 32768.0
-                return {"waveform": normalized_audio, "framerate": framerate, "duration": n_frames / float(framerate), "avg_amplitude": np.mean(np.abs(normalized_audio)), "peak_amplitude": np.max(np.abs(normalized_audio)), "dynamic_range": np.max(np.abs(normalized_audio)) - np.min(np.abs(normalized_audio))}
-    except Exception: return None
+        sound = AudioSegment.from_file(io.BytesIO(audio_bytes))
+        sound = sound.set_channels(1) # Mono for consistent analysis
+        audio_array = np.array(sound.get_array_of_samples())
+        framerate = sound.frame_rate
+        normalized_audio = audio_array / (2**(sound.sample_width * 8 - 1))
+        duration = len(normalized_audio) / framerate
+        avg_amplitude = np.mean(np.abs(normalized_audio))
+        peak_amplitude = np.max(np.abs(normalized_audio))
+        return {
+            "waveform": normalized_audio, "framerate": framerate, "duration": duration,
+            "avg_amplitude": avg_amplitude, "peak_amplitude": peak_amplitude
+        }
+    except Exception as e:
+        st.error(f"Could not process audio file. It might be corrupted. Error: {e}")
+        return None
 
 def get_human_comparative_analysis(benchmark_features, user_features):
     if not benchmark_features or not user_features: return "Could not analyze one or both audio files."
-    tone_comp, dyn_comp, style_comp = "similar", "very close to", "well"
-    if user_features["peak_amplitude"] > benchmark_features["peak_amplitude"] * 1.1: tone_comp = "brighter and more piercing than"
-    elif user_features["peak_amplitude"] < benchmark_features["peak_amplitude"] * 0.9: tone_comp = "warmer and less aggressive than"
-    if user_features["avg_amplitude"] > benchmark_features["avg_amplitude"] * 1.15: dyn_comp = "generally louder than"
+    dyn_comp = "very similar to"
+    if user_features["avg_amplitude"] > benchmark_features["avg_amplitude"] * 1.15: dyn_comp = "generally louder and more powerful than"
     elif user_features["avg_amplitude"] < benchmark_features["avg_amplitude"] * 0.85: dyn_comp = "quieter and more reserved than"
-    if user_features["dynamic_range"] > benchmark_features["dynamic_range"] * 1.15: style_comp = "wider, with more contrast than"
-    elif user_features["dynamic_range"] < benchmark_features["dynamic_range"] * 0.85: style_comp = "narrower than"
-    return (f"**Dynamics:** Your performance was {dyn_comp} the benchmark. (Avg. Loudness: {user_features['avg_amplitude']:.2f} vs {benchmark_features['avg_amplitude']:.2f})\n\n"
-            f"**Tonal Quality:** Your tone was {tone_comp} the goal recording, suggesting a difference in bow pressure.\n\n"
-            f"**Playing Style:** You employed a {style_comp} the benchmark's dynamic range, reflecting your expressive choices.")
+    duration_ratio = user_features["duration"] / benchmark_features["duration"]
+    tempo_comp = "at a very similar tempo to"
+    if duration_ratio < 0.95: tempo_comp = "significantly faster than"
+    elif duration_ratio > 1.05: tempo_comp = "significantly slower than"
+    return (f"**Tempo:** You played this piece **{tempo_comp}** the benchmark, taking {user_features['duration']:.1f} seconds compared to the benchmark's {benchmark_features['duration']:.1f} seconds.\n\n"
+            f"**Dynamics:** Your performance was **{dyn_comp}** the benchmark. This is reflected in the average loudness of your recording ({user_features['avg_amplitude']:.2f}) versus the goal ({benchmark_features['avg_amplitude']:.2f}).\n\n"
+            f"**Tonal Quality:** Based on the waveforms, your peak amplitudes are {'higher' if user_features['peak_amplitude'] > benchmark_features['peak_amplitude'] else 'lower'} than the benchmark, suggesting a difference in attack and bow pressure.")
 
 def plot_waveform(features, title, color):
     fig, ax = plt.subplots(figsize=(10, 2))
@@ -105,33 +108,71 @@ def plot_waveform(features, title, color):
     ax.plot(time_axis, features["waveform"], color=color, linewidth=0.5)
     ax.set_title(title, color='white'); ax.set_xlabel("Time (s)", color='white')
     ax.set_ylabel("Amplitude", color='white'); ax.set_ylim([-1, 1])
-    ax.grid(True, alpha=0.2); ax.tick_params(colors='white', which='both')
+    ax.grid(True, alpha=0.2, color='#888888'); ax.tick_params(colors='white', which='both')
     fig.patch.set_facecolor('none'); ax.set_facecolor('none')
     return fig
 
-# --- STATE INITIALIZATION & CALLBACKS --- (Unchanged)
-if 'initialized' not in st.session_state:
-    st.session_state.initialized = True
-    st.session_state.search_query = ''; st.session_state.searched_piece_info = None
-    st.session_state.audio_frames = []; st.session_state.user_audio_bytes = None
-    st.session_state.benchmark_audio_bytes = None; st.session_state.ai_feedback = ""
-    st.session_state.analysis_error = ''; st.session_state.volume_level = 0.0
+# --- STATE INITIALIZATION & HELPERS ---
+def init_state():
+    if 'initialized' not in st.session_state:
+        st.session_state.initialized = True
+        st.session_state.search_query = ''; st.session_state.searched_piece_info = None
+        st.session_state.user_audio_bytes = None
+        st.session_state.benchmark_audio_bytes = None; st.session_state.ai_feedback = ""
+        st.session_state.analysis_error = ''; st.session_state.analysis_complete = False
+        st.session_state.benchmark_history = []; st.session_state.user_history = []
+        st.session_state.audio_frames = []; st.session_state.volume_level = 0.0
 
-def handle_benchmark_upload():
-    if st.session_state.benchmark_uploader is not None:
-        st.session_state.benchmark_audio_bytes = st.session_state.benchmark_uploader.getvalue()
-        st.session_state.ai_feedback = ""
+def add_to_history(history_key, audio_bytes, source_name):
+    history = st.session_state[history_key]
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    history.insert(0, {"timestamp": timestamp, "audio": audio_bytes, "name": source_name})
+    st.session_state[history_key] = history[:5]
 
-def audio_frame_callback(frame):
-    audio_data = frame.to_ndarray()
-    rms = np.sqrt(np.mean(np.square(audio_data)))
-    volume = min(100, int(rms * 500))
-    st.session_state["volume_level"] = volume
-    st.session_state.audio_frames.append(audio_data.tobytes())
-    return frame
+def create_audio_input_section(title, type_key):
+    st.subheader(title)
+    
+    # Option 1: Upload
+    with st.expander(f"Upload an Audio File"):
+        uploaded_file = st.file_uploader(f"Upload {type_key.capitalize()} Audio", type=['wav', 'mp3', 'm4a'], key=f"{type_key}_uploader")
+        if uploaded_file:
+            audio_bytes = uploaded_file.getvalue()
+            if audio_bytes != st.session_state[f"{type_key}_audio_bytes"]:
+                st.session_state[f"{type_key}_audio_bytes"] = audio_bytes
+                add_to_history(f"{type_key}_history", audio_bytes, uploaded_file.name)
+                st.rerun()
 
-# --- MAIN APP LAYOUT & STYLING ---
+    # Option 2: Record
+    with st.expander(f"Record Live Audio"):
+        webrtc_ctx = webrtc_streamer(key=f"{type_key}_recorder", mode=WebRtcMode.SENDONLY, audio_frame_callback=audio_frame_callback, media_stream_constraints={"audio": True, "video": False})
+        if webrtc_ctx.state.playing:
+            st.progress(st.session_state.get("volume_level", 0), text=f"Recording... {st.session_state.get('volume_level', 0)}%")
+        
+        if not webrtc_ctx.state.playing and len(st.session_state.get("audio_frames", [])) > 0:
+            wav_buffer = io.BytesIO()
+            with wave.open(wav_buffer, 'wb') as wf:
+                wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(48000)
+                wf.writeframes(b''.join(st.session_state.audio_frames))
+            st.session_state[f"{type_key}_audio_bytes"] = wav_buffer.getvalue()
+            st.session_state.audio_frames = [] # Clear buffer
+            add_to_history(f"{type_key}_history", st.session_state[f"{type_key}_audio_bytes"], "Live Recording")
+            st.rerun()
+
+    # Display current audio and history
+    if st.session_state[f"{type_key}_audio_bytes"]:
+        st.write(f"**Current {type_key.capitalize()}:**")
+        st.audio(st.session_state[f"{type_key}_audio_bytes"])
+    
+    if st.session_state[f"{type_key}_history"]:
+        with st.expander("View History (Last 5)"):
+            for record in st.session_state[f"{type_key}_history"]:
+                st.write(f"{record['name']} ({record['timestamp']})")
+                st.audio(record['audio'])
+
+# --- MAIN APP LAYOUT ---
 st.set_page_config(layout="centered", page_title="Violin Studio")
+init_state()
+
 st.markdown("""
     <style>
         .stApp { background-color: #000000; }
@@ -140,8 +181,6 @@ st.markdown("""
         div[role="tablist"] { justify-content: center; }
         button[role="tab"] { font-size: 1.2rem; padding: 10px 20px; border: 2px solid transparent; }
         button[role="tab"][aria-selected="true"] { border-bottom: 2px solid #FFFF00; color: #FFFF00; }
-        div[data-testid="stTabs"] .st-emotion-cache-19rxjzo:nth-child(1) h2,
-        div[data-testid="stTabs"] .st-emotion-cache-19rxjzo:nth-child(1) h3 { color: #FFFF00 !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -151,11 +190,9 @@ tab1, tab2 = st.tabs(["About the Piece", "Compare with Benchmark"])
 
 with tab1:
     st.header("Musical Repertoire Explorer")
-    st.write("Enter the name of a piece to learn about its composer, history, and musical context.")
-    search_query = st.text_input("Search for a piece:", key="search_query_input", placeholder="e.g., Vivaldi Four Seasons")
+    search_query = st.text_input("Search for a piece:", placeholder="e.g., Vivaldi Four Seasons")
     if st.button("Search", key="search_piece"):
         st.session_state.searched_piece_info = fetch_piece_info(search_query)
-
     if st.session_state.searched_piece_info:
         info = st.session_state.searched_piece_info
         st.divider()
@@ -172,49 +209,42 @@ with tab1:
 
 with tab2:
     st.header("Compare with Benchmark")
-    st.write("Upload a recording you want to sound like, then record yourself and get a direct comparison.")
+    st.write("Provide a goal recording and your own performance, then get a direct comparison.")
+    
     c1, c2 = st.columns(2)
     with c1:
-        st.subheader("Recording Goal")
-        st.file_uploader("Upload a benchmark recording", type=['wav', 'mp3', 'm4a'], key="benchmark_uploader", on_change=handle_benchmark_upload)
-        if st.session_state.benchmark_audio_bytes: st.audio(st.session_state.benchmark_audio_bytes)
+        create_audio_input_section("Recording Goal", "benchmark")
     with c2:
-        st.subheader("My Recording")
-        webrtc_ctx = webrtc_streamer(key="audio-recorder", mode=WebRtcMode.SENDONLY, audio_frame_callback=audio_frame_callback, media_stream_constraints={"audio": True, "video": False})
-        
-        if webrtc_ctx.state.playing: 
-            st.progress(st.session_state.get("volume_level", 0), text=f"Loudness: {st.session_state.get('volume_level', 0)}%")
-        
-        if not webrtc_ctx.state.playing and len(st.session_state.get("audio_frames", [])) > 0:
-            wav_buffer = io.BytesIO()
-            with wave.open(wav_buffer, 'wb') as wf:
-                wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(48000)
-                wf.writeframes(b''.join(st.session_state.audio_frames))
-            st.session_state.user_audio_bytes = wav_buffer.getvalue()
-            st.session_state.audio_frames = [] # Clear the buffer after processing
-            st.rerun()
-
-        if st.session_state.user_audio_bytes: 
-            st.audio(st.session_state.user_audio_bytes, format='audio/wav')
+        create_audio_input_section("My Recording", "user")
 
     st.divider()
+
     if st.session_state.benchmark_audio_bytes and st.session_state.user_audio_bytes:
         if st.button("Compare Recordings", type="primary", use_container_width=True):
             st.session_state.ai_feedback, st.session_state.analysis_error = "", ""
             with st.spinner("AI is analyzing your performance..."):
                 benchmark_features = analyze_audio_features(st.session_state.benchmark_audio_bytes)
                 user_features = analyze_audio_features(st.session_state.user_audio_bytes)
-                time.sleep(3)
+                time.sleep(2)
                 if benchmark_features and user_features: 
                     st.session_state.ai_feedback = get_human_comparative_analysis(benchmark_features, user_features)
                 else: 
                     st.session_state.analysis_error = "Could not process one or both audio files."
-            st.balloons()
-            time.sleep(1)
+            st.session_state.analysis_complete = True
             st.rerun()
-
+    
+    if st.session_state.analysis_complete:
+        st.toast("✅ Analysis Complete!")
+        st.markdown("""
+            <a href="#analysis-section" style="text-decoration: none;">
+                <button style="background-color: #FFFF00; color: black; border: none; padding: 10px 20px; border-radius: 50px; font-weight: bold; cursor: pointer; width: 100%;">
+                    View Analysis Results
+                </button>
+            </a>
+        """, unsafe_allow_html=True)
+    
     if st.session_state.ai_feedback or st.session_state.analysis_error:
-        st.subheader("Comparative Analysis")
+        st.subheader("Comparative Analysis", anchor="analysis-section")
         if st.session_state.analysis_error: st.error(st.session_state.analysis_error)
         if st.session_state.ai_feedback:
             benchmark_features = analyze_audio_features(st.session_state.benchmark_audio_bytes)
