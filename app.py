@@ -1,12 +1,12 @@
 import streamlit as st
 import time
-import random
 import io
 import wave
 import numpy as np
 import matplotlib.pyplot as plt
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
-from pathlib import Path
+from st_audiorec import st_audiorec
+from datetime import datetime
+from pydub import AudioSegment
 
 # --- THE COMPLETE DATABASE (NO ABBREVIATIONS) ---
 pieceDatabase = {
@@ -64,7 +64,7 @@ pieceDatabase = {
     "mendelssohn_violin_concerto_3": { "composer": "Felix Mendelssohn", "title": "Violin Concerto, Op. 64: III. Allegro molto vivace", "keywords": ["mendelssohn", "concerto", "vivace"], "duration": "06:50", "description": "The finale of Mendelssohn's Violin Concerto is a light, sparkling, and virtuosic Allegro molto vivace. It has a scherzo-like character, with a sense of playful energy and elfin grace that is characteristic of Mendelssohn's style. The movement is a brilliant showcase for the soloist's agility and technical skill, with rapid passagework and a light, crisp bowing style. It brings the concerto to a joyful and exhilarating conclusion.", "usualTempo": 168, "practiceTempo": 134 },
 }
 
-# --- HELPER FUNCTIONS ---
+# --- HELPER FUNCTIONS --- (Unchanged)
 def fetch_piece_info(piece_name):
     if not piece_name: return None
     search_terms = piece_name.lower().split()
@@ -109,7 +109,7 @@ def plot_waveform(features, title, color):
     fig.patch.set_facecolor('none'); ax.set_facecolor('none')
     return fig
 
-# --- STATE INITIALIZATION & CALLBACKS ---
+# --- STATE INITIALIZATION & CALLBACKS --- (Unchanged)
 if 'initialized' not in st.session_state:
     st.session_state.initialized = True
     st.session_state.search_query = ''; st.session_state.searched_piece_info = None
@@ -182,7 +182,6 @@ with tab2:
         st.subheader("My Recording")
         webrtc_ctx = webrtc_streamer(key="audio-recorder", mode=WebRtcMode.SENDONLY, audio_frame_callback=audio_frame_callback, media_stream_constraints={"audio": True, "video": False})
         
-        # Use .get() to safely access session state keys to prevent crashes
         if webrtc_ctx.state.playing: 
             st.progress(st.session_state.get("volume_level", 0), text=f"Loudness: {st.session_state.get('volume_level', 0)}%")
         
