@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 from pathlib import Path
 
-# --- THE COMPLETE DATABASE ---
+# --- THE COMPLETE DATABASE (NO ABBREVIATIONS) ---
 pieceDatabase = {
     # Base Pieces
     "bach_d_minor_partita": { "composer": "J.S. Bach", "title": "Partita No. 2 in D minor, BWV 1004", "keywords": ["bach", "chaconne"], "duration": "14:00+", "description": "A cornerstone of the solo violin repertoire, this partita is renowned for its final movement, the 'Chaconne.' This single movement is a monumental work, demanding profound emotional depth and technical mastery through a continuous set of variations on a bass line.", "usualTempo": 76, "practiceTempo": 60 },
@@ -64,7 +64,7 @@ pieceDatabase = {
     "mendelssohn_violin_concerto_3": { "composer": "Felix Mendelssohn", "title": "Violin Concerto, Op. 64: III. Allegro molto vivace", "keywords": ["mendelssohn", "concerto", "vivace"], "duration": "06:50", "description": "The finale of Mendelssohn's Violin Concerto is a light, sparkling, and virtuosic Allegro molto vivace. It has a scherzo-like character, with a sense of playful energy and elfin grace that is characteristic of Mendelssohn's style. The movement is a brilliant showcase for the soloist's agility and technical skill, with rapid passagework and a light, crisp bowing style. It brings the concerto to a joyful and exhilarating conclusion.", "usualTempo": 168, "practiceTempo": 134 },
 }
 
-# --- HELPER FUNCTIONS --- (Unchanged)
+# --- HELPER FUNCTIONS ---
 def fetch_piece_info(piece_name):
     if not piece_name: return None
     search_terms = piece_name.lower().split()
@@ -109,7 +109,7 @@ def plot_waveform(features, title, color):
     fig.patch.set_facecolor('none'); ax.set_facecolor('none')
     return fig
 
-# --- STATE INITIALIZATION & CALLBACKS --- (Unchanged)
+# --- STATE INITIALIZATION & CALLBACKS ---
 if 'initialized' not in st.session_state:
     st.session_state.initialized = True
     st.session_state.search_query = ''; st.session_state.searched_piece_info = None
@@ -181,16 +181,23 @@ with tab2:
     with c2:
         st.subheader("My Recording")
         webrtc_ctx = webrtc_streamer(key="audio-recorder", mode=WebRtcMode.SENDONLY, audio_frame_callback=audio_frame_callback, media_stream_constraints={"audio": True, "video": False})
-        if webrtc_ctx.state.playing: st.progress(st.session_state.get("volume_level", 0), text=f"Loudness: {st.session_state.get('volume_level', 0)}%")
-        if not webrtc_ctx.state.playing and len(st.session_state.audio_frames) > 0:
+        
+        # Use .get() to safely access session state keys to prevent crashes
+        if webrtc_ctx.state.playing: 
+            st.progress(st.session_state.get("volume_level", 0), text=f"Loudness: {st.session_state.get('volume_level', 0)}%")
+        
+        if not webrtc_ctx.state.playing and len(st.session_state.get("audio_frames", [])) > 0:
             wav_buffer = io.BytesIO()
             with wave.open(wav_buffer, 'wb') as wf:
                 wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(48000)
                 wf.writeframes(b''.join(st.session_state.audio_frames))
             st.session_state.user_audio_bytes = wav_buffer.getvalue()
-            st.session_state.audio_frames = []
+            st.session_state.audio_frames = [] # Clear the buffer after processing
             st.rerun()
-        if st.session_state.user_audio_bytes: st.audio(st.session_state.user_audio_bytes, format='audio/wav')
+
+        if st.session_state.user_audio_bytes: 
+            st.audio(st.session_state.user_audio_bytes, format='audio/wav')
+
     st.divider()
     if st.session_state.benchmark_audio_bytes and st.session_state.user_audio_bytes:
         if st.button("Compare Recordings", type="primary", use_container_width=True):
@@ -199,11 +206,14 @@ with tab2:
                 benchmark_features = analyze_audio_features(st.session_state.benchmark_audio_bytes)
                 user_features = analyze_audio_features(st.session_state.user_audio_bytes)
                 time.sleep(3)
-                if benchmark_features and user_features: st.session_state.ai_feedback = get_human_comparative_analysis(benchmark_features, user_features)
-                else: st.session_state.analysis_error = "Could not process one or both audio files."
+                if benchmark_features and user_features: 
+                    st.session_state.ai_feedback = get_human_comparative_analysis(benchmark_features, user_features)
+                else: 
+                    st.session_state.analysis_error = "Could not process one or both audio files."
             st.balloons()
             time.sleep(1)
             st.rerun()
+
     if st.session_state.ai_feedback or st.session_state.analysis_error:
         st.subheader("Comparative Analysis")
         if st.session_state.analysis_error: st.error(st.session_state.analysis_error)
